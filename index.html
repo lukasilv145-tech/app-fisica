@@ -64,6 +64,11 @@
   }
   button.ghost:hover{color:var(--text);border-color:var(--accent)}
   canvas{display:block;width:100%;height:auto;background:var(--panel2)}
+  .fxwrap{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 14px;border-top:1px solid var(--line);background:rgba(120,150,200,.05);font-family:var(--mono);min-height:24px}
+  .fx{display:flex;align-items:center;gap:8px;font-size:.76rem;white-space:nowrap}
+  .fx .sym{color:var(--muted)}
+  .fx .arw{color:var(--accent);opacity:.55}
+  .fx .sub{color:var(--accent);font-weight:600}
   .desc{padding:12px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:.84rem;line-height:1.5}
   .desc b{color:var(--text)}
   .desc code{font-family:var(--mono);color:var(--accent);font-size:.8rem}
@@ -76,6 +81,10 @@
   .ctrl label .val{color:var(--accent);font-weight:600}
   input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
   select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:.78rem;padding:6px 8px;border-radius:7px;cursor:pointer}
+  .btngrp{display:flex;gap:6px;flex-wrap:wrap}
+  .seg{flex:1;min-width:70px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);padding:7px 6px;border-radius:7px;font-family:var(--mono);font-size:.72rem;cursor:pointer;text-align:center}
+  .seg:hover{color:var(--text)}
+  .seg.on{border-color:var(--accent);color:var(--accent);background:rgba(255,255,255,.04);font-weight:600}
   .uni{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .uni .ctrl{margin-bottom:0}
   .reads{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -109,6 +118,7 @@
       </div>
     </div>
     <canvas id="cv" width="900" height="520"></canvas>
+    <div class="fxwrap" id="formulas"></div>
     <div class="desc" id="simDesc"></div>
   </div>
 
@@ -128,13 +138,13 @@
   </div>
 </div>
 
-<footer>labfísica v2.0 — apps script edition · unidades conversíveis no painel lateral · arraste os sliders e observe as medições em tempo real</footer>
+<footer>labfísica v2.1 — apps script edition · unidades conversíveis em sliders e medições · fórmulas ao vivo · arraste os sliders e observe as medições em tempo real</footer>
 <script>
 /* ================== ENGINE ================== */
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const W=cv.width, H=cv.height;
 const COLORS={f1:'#ffb454',f2:'#4fd6e3',f3:'#a78bfa'};
-let currentMod='f1', currentSim=null, S={}, tSim=0, running=true, lastTs=0;
+let currentMod='f1', currentSim=null, currentSimId=null, S={}, tSim=0, running=true, lastTs=0, fAcc=1;
 
 function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
 function setAccent(mod){document.documentElement.style.setProperty('--accent',COLORS[mod])}
@@ -149,30 +159,45 @@ const UNIT_DEFS={
   dist:{label:'distância',opts:[['m',v=>v],['cm',v=>v*100],['km',v=>v/1000]]},
   energy:{label:'energia',opts:[['J',v=>v],['kJ',v=>v/1000],['cal',v=>v/4.186]]},
   force:{label:'força',opts:[['N',v=>v],['kgf',v=>v/9.80665],['dyn',v=>v*1e5]]},
+  mass:{label:'massa',opts:[['kg',v=>v],['g',v=>v*1000],['lb',v=>v*2.20462]]},
 };
-const UNIT_SEL={vel:0,temp:0,press:0,dist:0,energy:0,force:0};
+const UNIT_SEL={vel:0,temp:0,press:0,dist:0,energy:0,force:0,mass:0};
 function U(q,val,dec){const o=UNIT_DEFS[q].opts[UNIT_SEL[q]];return fmt(o[1](val),dec??2)+' '+o[0];}
 function buildUnits(){
   const box=document.getElementById('units');
   box.innerHTML=Object.keys(UNIT_DEFS).map(q=>`<div class="ctrl"><label>${UNIT_DEFS[q].label}</label>
     <select data-q="${q}">${UNIT_DEFS[q].opts.map((o,i)=>`<option value="${i}">${o[0]}</option>`).join('')}</select></div>`).join('');
-  box.querySelectorAll('select').forEach(s=>s.onchange=()=>{UNIT_SEL[s.dataset.q]=+s.value;});
+  box.querySelectorAll('select').forEach(s=>s.onchange=()=>{UNIT_SEL[s.dataset.q]=+s.value;refreshControlLabels();});
+}
+function refreshControlLabels(){ if(currentSim) currentSim.controls.forEach(c=>c._show&&c._show());
 }
 
 function buildControls(sim){
   const box=document.getElementById('controls'); box.innerHTML='';
   sim.controls.forEach(c=>{
+    if(c.type==='btns'){
+      const div=document.createElement('div'); div.className='ctrl';
+      div.innerHTML=`<label>${c.label}</label><div class="btngrp"></div>`;
+      box.appendChild(div);
+      const grp=div.querySelector('.btngrp');
+      c.opts.forEach((o,i)=>{
+        const b=document.createElement('button'); b.type='button'; b.className='seg'; b.textContent=o;
+        b.onclick=()=>{S.p[c.id]=i;[...grp.children].forEach((x,j)=>x.classList.toggle('on',j===i));if(!c.live)resetSim();};
+        grp.appendChild(b);
+      });
+      S.p[c.id]=c.value; grp.children[c.value].classList.add('on');
+      return;
+    }
     const div=document.createElement('div'); div.className='ctrl';
     div.innerHTML=`<label>${c.label}<span class="val" id="val_${c.id}"></span></label>
       <input type="range" id="in_${c.id}" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.value}">`;
     box.appendChild(div);
     const inp=div.querySelector('input');
-    const upd=()=>{ S.p[c.id]=parseFloat(inp.value);
-      document.getElementById('val_'+c.id).textContent=fmt(S.p[c.id],c.dec??2)+(c.unit?' '+c.unit:'');
-      if(!c.live) resetSim(); };
+    const show=()=>{const el=document.getElementById('val_'+c.id); if(!el)return;
+      el.textContent=c.q?U(c.q,(c.qconv||(v=>v))(S.p[c.id]),c.dec):fmt(S.p[c.id],c.dec??2)+(c.unit?' '+c.unit:'');};
+    const upd=()=>{ S.p[c.id]=parseFloat(inp.value); show(); if(!c.live) resetSim(); };
     inp.addEventListener('input',upd);
-    S.p[c.id]=c.value;
-    document.getElementById('val_'+c.id).textContent=fmt(c.value,c.dec??2)+(c.unit?' '+c.unit:'');
+    S.p[c.id]=c.value; show(); c._show=show;
   });
 }
 
@@ -187,7 +212,7 @@ function renderReads(list){
 function resetSim(){ tSim=0; currentSim.init(S); }
 
 function loadSim(id){
-  currentSim=SIMS[id];
+  currentSim=SIMS[id]; currentSimId=id; fAcc=1;
   S={p:{}};
   document.getElementById('simTitle').textContent=currentSim.title;
   document.getElementById('simDesc').innerHTML=currentSim.desc;
@@ -204,6 +229,8 @@ function loop(ts){
   grid();
   currentSim.draw(ctx,S);
   renderReads(currentSim.read(S));
+  fAcc+=dt;
+  if(fAcc>0.12){fAcc=0;renderFormulas();}
   requestAnimationFrame(loop);
 }
 function grid(){
@@ -234,22 +261,32 @@ SIMS.projetil={
   title:'Lançamento Oblíquo', mod:'f1',
   desc:'Um projétil lançado com velocidade <b>v₀</b> e ângulo <b>θ</b>. Trajetória parabólica: <code>y = x·tanθ − g·x²/(2v₀²cos²θ)</code>. Alcance máximo em θ = 45°. Ignora resistência do ar.',
   controls:[
-    {id:'v0',label:'Velocidade inicial',min:5,max:50,step:1,value:25,unit:'m/s',dec:0},
+    {id:'v0',label:'Velocidade inicial',min:5,max:50,step:1,value:25,unit:'m/s',dec:0,q:'vel'},
     {id:'ang',label:'Ângulo',min:5,max:85,step:1,value:45,unit:'°',dec:0},
+    {id:'h0',label:'Altura inicial',min:0,max:30,step:1,value:0,unit:'m',dec:0,q:'dist'},
     {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1},
   ],
-  init(S){ S.t=0; S.trail=[]; S.done=false;
+  init(S){ S.t=0; S.trail=[]; S.done=false; S.wait=0; S.lastSamp=-1;
     const a=S.p.ang*Math.PI/180;
     S.vx=S.p.v0*Math.cos(a); S.vy=S.p.v0*Math.sin(a);
-    S.range=S.p.v0*S.p.v0*Math.sin(2*a)/S.p.g;
-    S.hmax=(S.p.v0*Math.sin(a))**2/(2*S.p.g);
-    S.tf=2*S.p.v0*Math.sin(a)/S.p.g;
-    S.scale=Math.min((W-120)/Math.max(S.range,10),(H-140)/Math.max(S.hmax,10));
+    S.tf=(S.vy+Math.sqrt(S.vy*S.vy+2*S.p.g*S.p.h0))/S.p.g;
+    S.range=S.vx*S.tf;
+    S.hmax=S.p.h0+(S.vy*S.vy)/(2*S.p.g);
+    S.scale=Math.min((W-140)/Math.max(S.range,10),(H-160)/Math.max(S.hmax,10));
+    S.x=0; S.y=S.p.h0;
   },
-  update(S,dt){ if(S.done)return; S.t+=dt;
-    if(S.t>=S.tf){S.t=S.tf;S.done=true;}
-    S.x=S.vx*S.t; S.y=S.vy*S.t-0.5*S.p.g*S.t*S.t;
-    S.trail.push([S.x,S.y]); if(S.trail.length>600)S.trail.shift();
+  update(S,dt){
+    if(S.done){ S.wait+=dt; if(S.wait>1.4) this.init(S); return; }
+    S.t=Math.min(S.t+dt,S.tf);
+    S.x=S.vx*S.t;
+    S.y=Math.max(0,S.p.h0+S.vy*S.t-0.5*S.p.g*S.t*S.t);
+    // amostra o rastro a cada 0.05s de simulação → pontos únicos e espaçados
+    if(S.t-S.lastSamp>=0.05){ S.trail.push([S.x,S.y]); S.lastSamp=S.t; }
+    if(S.t>=S.tf){
+      S.done=true;
+      const L=S.trail[S.trail.length-1];
+      if(!L||L[0]!==S.x) S.trail.push([S.x,S.y]);
+    }
   },
   draw(c,S){
     const ox=60, oy=H-70, sc=S.scale;
@@ -257,12 +294,17 @@ SIMS.projetil={
     c.beginPath();c.moveTo(0,oy);c.lineTo(W,oy);c.stroke();
     // trajetória prevista
     c.strokeStyle='rgba(255,180,84,.25)'; c.setLineDash([4,5]); c.beginPath();
-    for(let i=0;i<=60;i++){const t=S.tf*i/60, x=S.vx*t, y=S.vy*t-0.5*S.p.g*t*t;
+    for(let i=0;i<=60;i++){const t=S.tf*i/60, x=S.vx*t, y=S.p.h0+S.vy*t-0.5*S.p.g*t*t;
       i?c.lineTo(ox+x*sc,oy-y*sc):c.moveTo(ox+x*sc,oy-y*sc);}
     c.stroke(); c.setLineDash([]);
-    // rastro
+    // plataforma de lançamento (se h0 > 0)
+    if(S.p.h0>0){
+      c.fillStyle='rgba(120,150,200,.25)';
+      c.fillRect(ox-16,oy-S.p.h0*sc,16,S.p.h0*sc);
+    }
+    // rastro (amostrado no tempo, sem duplicatas)
     c.fillStyle=COLORS.f1;
-    S.trail.forEach((p,i)=>{if(i%4==0){c.globalAlpha=.35;c.beginPath();c.arc(ox+p[0]*sc,oy-p[1]*sc,2.5,0,7);c.fill();}});
+    S.trail.forEach(p=>{c.globalAlpha=.38;c.beginPath();c.arc(ox+p[0]*sc,oy-p[1]*sc,2.5,0,7);c.fill();});
     c.globalAlpha=1;
     // projétil + vetores
     const px=ox+S.x*sc, py=oy-S.y*sc;
@@ -287,11 +329,12 @@ SIMS.inclinado={
   controls:[
     {id:'ang',label:'Ângulo da rampa',min:5,max:60,step:1,value:30,unit:'°',dec:0},
     {id:'mu',label:'Coef. de atrito μ',min:0,max:1.2,step:0.02,value:0.2},
-    {id:'m',label:'Massa',min:1,max:20,step:0.5,value:5,unit:'kg',dec:1},
+    {id:'m',label:'Massa',min:1,max:20,step:0.5,value:5,unit:'kg',dec:1,q:'mass'},
+    {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1},
   ],
   init(S){ S.s=0; S.v=0; },
   update(S,dt){
-    const th=S.p.ang*Math.PI/180, g=9.8;
+    const th=S.p.ang*Math.PI/180, g=S.p.g;
     S.static=Math.tan(th)<=S.p.mu && S.v===0;
     S.a=S.static?0:g*(Math.sin(th)-S.p.mu*Math.cos(th));
     if(S.a<0&&S.v<=0){S.a=0;S.v=0;S.static=true;}
@@ -313,7 +356,7 @@ SIMS.inclinado={
     c.fillStyle=COLORS.f1; c.fillRect(-22,-34,44,30);
     c.restore();
     // vetores
-    const g=9.8, N=S.p.m*g*Math.cos(th), P=S.p.m*g, Fat=S.p.mu*N;
+    const g=S.p.g, N=S.p.m*g*Math.cos(th), P=S.p.m*g, Fat=S.p.mu*N;
     arrow(px,py-20,0,P*3,'#ff7b9c');
     arrow(px,py-20,Math.sin(th)*N*3,-Math.cos(th)*N*3,'#6ee7a0');
     txt('P',px+6,py+P*3-24,'#ff7b9c',11);
@@ -321,7 +364,7 @@ SIMS.inclinado={
     txt('θ = '+S.p.ang+'°',bx+len-90,by-12,null,13);
     if(S.static) txt('EQUILÍBRIO ESTÁTICO (tanθ ≤ μ)',bx,60,COLORS.f1,14);
   },
-  read(S){ const th=S.p.ang*Math.PI/180,g=9.8;
+  read(S){ const th=S.p.ang*Math.PI/180,g=S.p.g;
     return [
       {k:'aceleração',v:fmt(S.a)+' m/s²'},{k:'velocidade',v:U('vel',S.v)},
       {k:'normal N',v:U('force',S.p.m*g*Math.cos(th),1)},{k:'atrito',v:U('force',S.p.mu*S.p.m*g*Math.cos(th),1)},
@@ -333,10 +376,10 @@ SIMS.colisao={
   title:'Colisões 1D', mod:'f1',
   desc:'Dois blocos colidem numa pista. <b>e</b> é o coeficiente de restituição: <code>e = 1</code> → elástica (energia conservada), <code>e = 0</code> → perfeitamente inelástica. Momento <code>p = m·v</code> sempre se conserva.',
   controls:[
-    {id:'m1',label:'Massa 1',min:1,max:10,step:0.5,value:2,unit:'kg',dec:1},
-    {id:'m2',label:'Massa 2',min:1,max:10,step:0.5,value:5,unit:'kg',dec:1},
-    {id:'v1',label:'Velocidade 1',min:-8,max:8,step:0.5,value:5,unit:'m/s',dec:1},
-    {id:'v2',label:'Velocidade 2',min:-8,max:8,step:0.5,value:-2,unit:'m/s',dec:1},
+    {id:'m1',label:'Massa 1',min:1,max:10,step:0.5,value:2,unit:'kg',dec:1,q:'mass'},
+    {id:'m2',label:'Massa 2',min:1,max:10,step:0.5,value:5,unit:'kg',dec:1,q:'mass'},
+    {id:'v1',label:'Velocidade 1',min:-8,max:8,step:0.5,value:5,unit:'m/s',dec:1,q:'vel'},
+    {id:'v2',label:'Velocidade 2',min:-8,max:8,step:0.5,value:-2,unit:'m/s',dec:1,q:'vel'},
     {id:'e',label:'Restituição e',min:0,max:1,step:0.05,value:1},
   ],
   init(S){ S.x1=200; S.x2=650; S.u1=S.p.v1*30; S.u2=S.p.v2*30; S.stuck=false; },
@@ -376,9 +419,10 @@ SIMS.pendulo={
   title:'Pêndulo Simples', mod:'f1',
   desc:'Equação real (não linearizada): <code>θ̈ = −(g/L)·senθ</code>. Para ângulos pequenos, período <code>T ≈ 2π√(L/g)</code> — note que <b>não depende da massa</b>.',
   controls:[
-    {id:'L',label:'Comprimento',min:0.5,max:4,step:0.1,value:2,unit:'m',dec:1},
+    {id:'L',label:'Comprimento',min:0.5,max:4,step:0.1,value:2,unit:'m',dec:1,q:'dist'},
     {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1},
     {id:'th0',label:'Ângulo inicial',min:5,max:80,step:1,value:40,unit:'°',dec:0},
+    {id:'m',label:'Massa (não afeta o período!)',min:0.5,max:10,step:0.5,value:2,unit:'kg',dec:1,q:'mass',live:true},
   ],
   init(S){ S.th=S.p.th0*Math.PI/180; S.w=0; },
   update(S,dt){
@@ -396,7 +440,7 @@ SIMS.pendulo={
     c.strokeStyle=css('--muted');c.lineWidth=2;
     c.beginPath();c.moveTo(ox,oy);c.lineTo(px,py);c.stroke();
     c.fillStyle=css('--line');c.beginPath();c.arc(ox,oy,6,0,7);c.fill();
-    c.fillStyle=COLORS.f1;c.beginPath();c.arc(px,py,16,0,7);c.fill();
+    c.fillStyle=COLORS.f1;c.beginPath();c.arc(px,py,10+S.p.m*1.4,0,7);c.fill();
     // arco do ângulo
     c.strokeStyle=COLORS.f1;c.beginPath();c.arc(ox,oy,44,Math.PI/2,Math.PI/2-S.th,S.th>0);c.stroke();
     txt('θ = '+fmt(S.th*180/Math.PI,1)+'°',ox+52,oy+58,COLORS.f1,13);
@@ -407,7 +451,7 @@ SIMS.pendulo={
     return [
       {k:'θ atual',v:fmt(S.th*180/Math.PI,1)+' °'},{k:'ω',v:fmt(S.w)+' rad/s'},
       {k:'v tangencial',v:U('vel',v)},{k:'período T',v:fmt(T)+' s'},
-      {k:'frequência',v:fmt(1/T)+' Hz'},{k:'tempo',v:fmt(tSim,1)+' s'},
+      {k:'frequência',v:fmt(1/T)+' Hz'},{k:'massa',v:U('mass',S.p.m,1)},
     ];}
 };
 
@@ -416,15 +460,16 @@ SIMS.mola={
   desc:'Movimento Harmônico Simples: <code>x(t) = A·cos(ωt)</code>, com <code>ω = √(k/m)</code>. Observe a troca contínua entre energia cinética e potencial elástica: <code>E = ½kA²</code> constante.',
   controls:[
     {id:'k',label:'Constante k',min:5,max:100,step:1,value:30,unit:'N/m',dec:0},
-    {id:'m',label:'Massa',min:0.5,max:10,step:0.1,value:2,unit:'kg',dec:1},
-    {id:'A',label:'Amplitude',min:0.2,max:1.5,step:0.05,value:1,unit:'m'},
+    {id:'m',label:'Massa',min:0.5,max:10,step:0.1,value:2,unit:'kg',dec:1,q:'mass'},
+    {id:'A',label:'Amplitude',min:0.2,max:1.5,step:0.05,value:1,unit:'m',q:'dist'},
+    {id:'phi',label:'Fase inicial φ',min:0,max:360,step:5,value:0,unit:'°',dec:0,live:true},
   ],
   init(S){ S.t=0; },
   update(S,dt){ S.t+=dt; },
   draw(c,S){
-    const w=Math.sqrt(S.p.k/S.p.m);
-    const x=S.p.A*Math.cos(w*S.t);
-    const v=-S.p.A*w*Math.sin(w*S.t);
+    const w=Math.sqrt(S.p.k/S.p.m), phi=S.p.phi*Math.PI/180;
+    const x=S.p.A*Math.cos(w*S.t+phi);
+    const v=-S.p.A*w*Math.sin(w*S.t+phi);
     const eq=W/2, y=H/2-40, sc=180;
     const px=eq+x*sc;
     // parede + mola
@@ -449,8 +494,8 @@ SIMS.mola={
     c.fillStyle='#ff7b9c';c.fillRect(bx+170,by,140*PE/E,18);
   },
   read(S){
-    const w=Math.sqrt(S.p.k/S.p.m);
-    const x=S.p.A*Math.cos(w*S.t), v=-S.p.A*w*Math.sin(w*S.t);
+    const w=Math.sqrt(S.p.k/S.p.m), phi=S.p.phi*Math.PI/180;
+    const x=S.p.A*Math.cos(w*S.t+phi), v=-S.p.A*w*Math.sin(w*S.t+phi);
     return [
       {k:'posição x',v:U('dist',x)},{k:'velocidade',v:U('vel',v)},
       {k:'ω',v:fmt(w)+' rad/s'},{k:'período',v:fmt(2*Math.PI/w)+' s'},
@@ -464,8 +509,9 @@ SIMS.gas={
   title:'Gás Ideal no Pistão', mod:'f2',
   desc:'Gás ideal em cilindro com pistão: <code>P·V = n·R·T</code>. Aumente <b>T</b> e veja as partículas acelerarem (v ∝ √T); comprima <b>V</b> e a pressão sobe. n = 1 mol fixo.',
   controls:[
-    {id:'T',label:'Temperatura',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true},
+    {id:'T',label:'Temperatura',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true,q:'temp'},
     {id:'V',label:'Volume',min:5,max:40,step:1,value:20,unit:'L',dec:0,live:true},
+    {id:'n',label:'Quantidade de gás n',min:0.5,max:3,step:0.1,value:1,unit:'mol',dec:1,live:true},
   ],
   init(S){
     S.parts=[];
@@ -496,15 +542,15 @@ SIMS.gas={
     const col=`rgb(${100+155*heat},${150-60*heat},${255-180*heat})`;
     c.fillStyle=col;
     S.parts.forEach(p=>{c.beginPath();c.arc(ox+p.x*cw,oy+p.y*ch,4,0,7);c.fill();});
-    const P=8.314*S.p.T/(S.p.V/1000)/1000; // kPa
+    const P=S.p.n*8.314*S.p.T/(S.p.V/1000)/1000; // kPa
     txt('P = '+fmt(P,0)+' kPa',ox,oy-14,COLORS.f2,14);
   },
   read(S){
-    const P=8.314*S.p.T/(S.p.V/1000)/1000;
+    const P=S.p.n*8.314*S.p.T/(S.p.V/1000)/1000;
     return [
       {k:'pressão',v:U('press',P,1)},{k:'volume',v:S.p.V+' L'},
       {k:'temperatura',v:U('temp',S.p.T,0)},{k:'PV/T (=nR)',v:fmt(P*1000*(S.p.V/1000)/S.p.T,2)+' J/K'},
-      {k:'E interna',v:U('energy',1.5*8.314*S.p.T,0)},{k:'n',v:'1 mol'},
+      {k:'E interna',v:U('energy',1.5*S.p.n*8.314*S.p.T,0)},{k:'n',v:fmt(S.p.n,1)+' mol'},
     ];}
 };
 
@@ -516,12 +562,12 @@ SIMS.ondas={
     {id:'a1',label:'Amplitude 1',min:0,max:60,step:2,value:40,unit:'px',dec:0,live:true},
     {id:'f2',label:'Frequência 2',min:0.2,max:3,step:0.05,value:1.2,unit:'Hz',live:true},
     {id:'a2',label:'Amplitude 2',min:0,max:60,step:2,value:40,unit:'px',dec:0,live:true},
-    {id:'dir',label:'Sentido onda 2 (−1 inverte)',min:-1,max:1,step:2,value:1,dec:0,live:true},
+    {id:'dir',type:'btns',label:'Sentido da onda 2',opts:['mesmo sentido','sentidos opostos'],value:0,live:true},
   ],
   init(S){},
   update(S,dt){},
   draw(c,S){
-    const y1=110,y2=230,y3=390;
+    const y1=110,y2=230,y3=390, d2=S.p.dir?-1:1;
     const k=0.025;
     const wave=(A,f,dir,x)=>A*Math.sin(k*x*f*2 - dir*2*Math.PI*f*tSim);
     const plot=(fn,yBase,color,lw)=>{
@@ -530,8 +576,8 @@ SIMS.ondas={
       c.stroke();
     };
     plot(x=>wave(S.p.a1,S.p.f1,1,x),y1,'rgba(79,214,227,.6)',1.5);
-    plot(x=>wave(S.p.a2,S.p.f2,S.p.dir,x),y2,'rgba(167,139,250,.6)',1.5);
-    plot(x=>wave(S.p.a1,S.p.f1,1,x)+wave(S.p.a2,S.p.f2,S.p.dir,x),y3,COLORS.f2,2.5);
+    plot(x=>wave(S.p.a2,S.p.f2,d2,x),y2,'rgba(167,139,250,.6)',1.5);
+    plot(x=>wave(S.p.a1,S.p.f1,1,x)+wave(S.p.a2,S.p.f2,d2,x),y3,COLORS.f2,2.5);
     txt('onda 1',10,y1-70,'rgba(79,214,227,.8)',12);
     txt('onda 2',10,y2-70,'rgba(167,139,250,.8)',12);
     txt('resultante (superposição)',10,y3-95,COLORS.f2,12);
@@ -540,27 +586,28 @@ SIMS.ondas={
     return [
       {k:'batimento',v:fmt(Math.abs(S.p.f1-S.p.f2))+' Hz'},
       {k:'A máx possível',v:fmt(S.p.a1+S.p.a2,0)+' px'},
-      {k:'modo',v:S.p.dir<0?'contrárias':'mesmo sentido'},
+      {k:'modo',v:S.p.dir?'contrárias':'mesmo sentido'},
       {k:'tempo',v:fmt(tSim,1)+' s'},
     ];}
 };
 
 SIMS.empuxo={
   title:'Empuxo — Princípio de Arquimedes', mod:'f2',
-  desc:'<code>E = ρ_líq · V_sub · g</code>. Se o objeto é menos denso que o líquido, flutua com fração submersa <code>ρ_obj/ρ_líq</code>. Se for mais denso, afunda. Ajuste as densidades e veja.',
+  desc:'<code>E = ρ_líq · V_sub · g</code>. Se o objeto é menos denso que o líquido, flutua em equilíbrio com fração submersa <code>ρ_obj/ρ_líq</code>. Se for mais denso, repousa no fundo. Ajuste as densidades e a posição de equilíbrio muda na hora.',
   controls:[
-    {id:'ro',label:'Densidade do objeto',min:100,max:3000,step:50,value:600,unit:'kg/m³',dec:0},
-    {id:'rl',label:'Densidade do líquido',min:600,max:2000,step:50,value:1000,unit:'kg/m³',dec:0},
+    {id:'ro',label:'Densidade do objeto',min:100,max:3000,step:50,value:600,unit:'kg/m³',dec:0,live:true},
+    {id:'rl',label:'Densidade do líquido',min:600,max:2000,step:50,value:1000,unit:'kg/m³',dec:0,live:true},
   ],
-  init(S){ S.y=100; S.v=0; },
+  init(S){ S.y=0; },
   update(S,dt){
-    const g=9.8, size=70, surf=200, bottom=H-60;
-    const top=S.y, bot=S.y+size;
-    let sub=0;
-    if(bot>surf) sub=Math.min(bot-surf,size)/size;
-    const a=g*(1-(S.p.rl/S.p.ro)*sub)-1.2*S.v;
-    S.v+=a*dt*40; S.y+=S.v*dt;
-    if(S.y+size>bottom){S.y=bottom-size;S.v=0;}
+    const size=70, surf=200, bottom=H-60;
+    // posição de equilíbrio direta: flutua com fração ρo/ρl submersa, ou repousa no fundo
+    if(S.p.ro<S.p.rl){
+      const f=S.p.ro/S.p.rl;
+      S.y=surf-size*(1-f);
+    } else {
+      S.y=bottom-size;
+    }
   },
   draw(c,S){
     const surf=200, size=70;
@@ -585,7 +632,7 @@ SIMS.empuxo={
       {k:'comportamento',v:flu?'flutua':'afunda'},
       {k:'fração submersa',v:flu?fmt(100*S.p.ro/S.p.rl,0)+' %':'100 %'},
       {k:'ρ obj / ρ líq',v:fmt(S.p.ro/S.p.rl,2)},
-      {k:'velocidade',v:fmt(S.v,1)+' px/s'},
+      {k:'equilíbrio',v:S.p.ro<S.p.rl?'E = P (flutua)':'apoiado no fundo'},
     ];}
 };
 
@@ -593,12 +640,12 @@ SIMS.calor={
   title:'Calorimetria — Equilíbrio Térmico', mod:'f2',
   desc:'Dois corpos em contato trocam calor até <code>T_eq = (m₁c₁T₁ + m₂c₂T₂)/(m₁c₁ + m₂c₂)</code>. Quem tem maior capacidade térmica (m·c) "puxa" o equilíbrio pro seu lado. Q cedido = Q recebido.',
   controls:[
-    {id:'m1',label:'Massa corpo 1',min:0.1,max:5,step:0.1,value:1,unit:'kg',dec:1},
+    {id:'m1',label:'Massa corpo 1',min:0.1,max:5,step:0.1,value:1,unit:'kg',dec:1,q:'mass'},
     {id:'c1',label:'Calor específico 1',min:100,max:4200,step:50,value:900,unit:'J/kg·K',dec:0},
-    {id:'T1',label:'Temp. inicial 1',min:0,max:100,step:1,value:90,unit:'°C',dec:0},
-    {id:'m2',label:'Massa corpo 2',min:0.1,max:5,step:0.1,value:2,unit:'kg',dec:1},
+    {id:'T1',label:'Temp. inicial 1',min:0,max:100,step:1,value:90,unit:'°C',dec:0,q:'temp',qconv:v=>v+273.15},
+    {id:'m2',label:'Massa corpo 2',min:0.1,max:5,step:0.1,value:2,unit:'kg',dec:1,q:'mass'},
     {id:'c2',label:'Calor específico 2',min:100,max:4200,step:50,value:4200,unit:'J/kg·K',dec:0},
-    {id:'T2',label:'Temp. inicial 2',min:0,max:100,step:1,value:20,unit:'°C',dec:0},
+    {id:'T2',label:'Temp. inicial 2',min:0,max:100,step:1,value:20,unit:'°C',dec:0,q:'temp',qconv:v=>v+273.15},
   ],
   init(S){ S.t1=S.p.T1; S.t2=S.p.T2; },
   update(S,dt){
@@ -639,9 +686,9 @@ SIMS.calor={
 
 SIMS.som={
   title:'Propagação do Som', mod:'f2',
-  desc:'Onda <b>longitudinal</b>: as partículas do meio oscilam na mesma direção da propagação, criando compressões e rarefações. <code>v = λ·f</code>. Velocidade depende do meio: ar ≈ 343, água ≈ 1480, aço ≈ 5960 m/s. Animação em câmera lenta (~100×).',
+  desc:'Onda <b>longitudinal</b>: as partículas do meio oscilam na mesma direção da propagação, criando compressões e rarefações. <code>v = λ·f</code>. Velocidade depende do meio: ar ≈ 343, água ≈ 1480, aço ≈ 5960 m/s. Animação em câmera bem lenta (~400×) pra dar pra acompanhar cada compressão passando.',
   controls:[
-    {id:'meio',label:'Meio (0 ar · 1 água · 2 aço)',min:0,max:2,step:1,value:0,dec:0,live:true},
+    {id:'meio',type:'btns',label:'Meio de propagação',opts:['ar · 343 m/s','água · 1480 m/s','aço · 5960 m/s'],value:0,live:true},
     {id:'f',label:'Frequência',min:200,max:2000,step:20,value:600,unit:'Hz',dec:0,live:true},
     {id:'A',label:'Amplitude',min:2,max:14,step:1,value:8,unit:'px',dec:0,live:true},
   ],
@@ -652,7 +699,7 @@ SIMS.som={
     const [nome,v,col]=meios[S.p.meio];
     const lam=v/S.p.f;            // m
     const lamPx=lam*300;          // escala 300 px/m
-    const k=2*Math.PI/lamPx, w=2*Math.PI*S.p.f/100; // câmera lenta 100x
+    const k=2*Math.PI/lamPx, w=2*Math.PI*S.p.f/400; // câmera lenta 400x
     for(let i=0;i<70;i++){
       const x0=20+i*(W-40)/70;
       const dx=S.p.A*Math.sin(k*x0-w*tSim);
@@ -690,8 +737,9 @@ SIMS.pressao={
   desc:'Lei de Stevin: <code>P = P₀ + ρ·g·h</code>. A pressão cresce linearmente com a profundidade e não depende do formato do recipiente. Repare nas setas: a pressão atua em <b>todas as direções</b>.',
   controls:[
     {id:'rho',label:'Densidade do líquido',min:600,max:13600,step:100,value:1000,unit:'kg/m³',dec:0,live:true},
-    {id:'h',label:'Profundidade do sensor',min:0,max:10,step:0.1,value:5,unit:'m',dec:1,live:true},
+    {id:'h',label:'Profundidade do sensor',min:0,max:10,step:0.1,value:5,unit:'m',dec:1,live:true,q:'dist'},
     {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1,live:true},
+    {id:'P0',label:'Pressão na superfície P₀',min:0,max:300,step:5,value:100,unit:'kPa',dec:0,live:true,q:'press'},
   ],
   init(S){},
   update(S,dt){},
@@ -717,14 +765,14 @@ SIMS.pressao={
     const L=10+S.p.rho*S.p.g*S.p.h/12000;
     [[L,0],[-L,0],[0,L],[0,-L]].forEach(v=>arrow(sx,sy,v[0],v[1],'#ffd27a'));
     txt('h = '+fmt(S.p.h,1)+' m',sx+16,(top+sy)/2,COLORS.f1,13);
-    txt('P₀ = 101,3 kPa (atm)',tx,top-14,null,12);
+    txt('P₀ = '+fmt(S.p.P0,0)+' kPa',tx,top-14,null,12);
   },
   read(S){
     const Ph=S.p.rho*S.p.g*S.p.h/1000;      // kPa
     return [
-      {k:'P hidrostática',v:U('press',Ph,1)},{k:'P absoluta',v:U('press',Ph+101.325,1)},
+      {k:'P hidrostática',v:U('press',Ph,1)},{k:'P absoluta',v:U('press',Ph+S.p.P0,1)},
       {k:'coluna d’água equiv.',v:U('dist',Ph*1000/(1000*9.8),2)},
-      {k:'F em 10 cm²',v:U('force',(Ph+101.325)*1000*0.001,1)},
+      {k:'F em 10 cm²',v:U('force',(Ph+S.p.P0)*1000*0.001,1)},
     ];}
 };
 
@@ -734,7 +782,7 @@ SIMS.hidro={
   controls:[
     {id:'A1',label:'Área A₁',min:20,max:100,step:2,value:60,unit:'cm²',dec:0,live:true},
     {id:'A2',label:'Área A₂',min:5,max:60,step:1,value:20,unit:'cm²',dec:0,live:true},
-    {id:'v1',label:'Velocidade v₁',min:0.5,max:5,step:0.1,value:2,unit:'m/s',dec:1,live:true},
+    {id:'v1',label:'Velocidade v₁',min:0.5,max:5,step:0.1,value:2,unit:'m/s',dec:1,live:true,q:'vel'},
     {id:'rho',label:'Densidade',min:700,max:1300,step:25,value:1000,unit:'kg/m³',dec:0,live:true},
   ],
   init(S){ S.parts=Array.from({length:46},()=>Math.random()); },
@@ -790,12 +838,13 @@ SIMS.lei1={
   title:'1ª Lei da Termodinâmica', mod:'f2',
   desc:'<code>ΔU = Q − W</code> (W = trabalho realizado <b>pelo</b> gás). Escolha a transformação e arraste o progresso: <b>isotérmica</b> (ΔU=0), <b>isobárica</b> (P cte), <b>isocórica</b> (W=0) ou <b>adiabática</b> (Q=0). Gás monoatômico, n = 1 mol.',
   controls:[
-    {id:'tipo',label:'Transformação (0 isot · 1 isob · 2 isoc · 3 adiab)',min:0,max:3,step:1,value:0,dec:0,live:true},
+    {id:'tipo',type:'btns',label:'Transformação',opts:['isotérmica','isobárica','isocórica','adiabática'],value:0,live:true},
     {id:'x',label:'Progresso do processo',min:-1,max:1,step:0.02,value:0.6,live:true},
+    {id:'n',label:'Mols de gás n',min:0.5,max:3,step:0.1,value:1,unit:'mol',dec:1,live:true},
   ],
   init(S){},
   calc(S,x){
-    const n=1,R=8.314,Cv=1.5*R,Cp=2.5*R,g=5/3;
+    const n=S.p.n??1,R=8.314,Cv=1.5*R,Cp=2.5*R,g=5/3;
     const P0=1e5,V0=0.02,T0=P0*V0/(n*R);
     let V=V0,P=P0,T=T0,Q=0,Wk=0;
     const t=S.p.tipo;
@@ -852,9 +901,9 @@ SIMS.maquina={
   title:'Máquina Térmica', mod:'f2',
   desc:'Recebe <b>Q_h</b> da fonte quente, converte parte em trabalho <b>W = η·Q_h</b> e rejeita <b>Q_c</b> pra fonte fria. Limite de Carnot: <code>η_máx = 1 − T_c/T_h</code>. Tente colocar η acima do limite e veja a 2ª lei reclamar kkk.',
   controls:[
-    {id:'Th',label:'T fonte quente',min:400,max:1200,step:10,value:800,unit:'K',dec:0,live:true},
-    {id:'Tc',label:'T fonte fria',min:200,max:400,step:5,value:300,unit:'K',dec:0,live:true},
-    {id:'Qh',label:'Q_h por ciclo',min:100,max:1000,step:25,value:500,unit:'J',dec:0,live:true},
+    {id:'Th',label:'T fonte quente',min:400,max:1200,step:10,value:800,unit:'K',dec:0,live:true,q:'temp'},
+    {id:'Tc',label:'T fonte fria',min:200,max:400,step:5,value:300,unit:'K',dec:0,live:true,q:'temp'},
+    {id:'Qh',label:'Q_h por ciclo',min:100,max:1000,step:25,value:500,unit:'J',dec:0,live:true,q:'energy'},
     {id:'eta',label:'Eficiência η pretendida',min:5,max:95,step:1,value:40,unit:'%',dec:0,live:true},
   ],
   init(S){ S.ang=0; },
@@ -916,8 +965,8 @@ SIMS.lei2={
   title:'2ª Lei — Entropia', mod:'f2',
   desc:'Calor flui espontaneamente do quente pro frio, e a entropia do universo só cresce: <code>dS = q(1/T_frio − 1/T_quente) ≥ 0</code>. Quanto maior a diferença de temperatura, mais entropia é gerada. Com T iguais: equilíbrio, dS = 0.',
   controls:[
-    {id:'Th',label:'T corpo quente',min:250,max:1000,step:10,value:600,unit:'K',dec:0,live:true},
-    {id:'Tc',label:'T corpo frio',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true},
+    {id:'Th',label:'T corpo quente',min:250,max:1000,step:10,value:600,unit:'K',dec:0,live:true,q:'temp'},
+    {id:'Tc',label:'T corpo frio',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true,q:'temp'},
     {id:'q',label:'Taxa de calor q',min:10,max:500,step:10,value:150,unit:'W',dec:0,live:true},
   ],
   init(S){ S.Stot=0; },
@@ -1018,7 +1067,7 @@ SIMS.campoB={
   controls:[
     {id:'I1',label:'Corrente I₁',min:-30,max:30,step:1,value:15,unit:'A',dec:0,live:true},
     {id:'I2',label:'Corrente I₂',min:-30,max:30,step:1,value:15,unit:'A',dec:0,live:true},
-    {id:'d',label:'Distância entre fios',min:120,max:460,step:10,value:280,unit:'cm',dec:0,live:true},
+    {id:'d',label:'Distância entre fios',min:120,max:460,step:10,value:280,unit:'cm',dec:0,live:true,q:'dist',qconv:v=>v/100},
   ],
   init(S){},
   update(S,dt){},
@@ -1085,7 +1134,7 @@ SIMS.rc={
     {id:'R',label:'Resistência',min:1,max:100,step:1,value:20,unit:'kΩ',dec:0},
     {id:'C',label:'Capacitância',min:10,max:500,step:10,value:100,unit:'µF',dec:0},
     {id:'V0',label:'Tensão da fonte',min:1,max:24,step:0.5,value:12,unit:'V',dec:1},
-    {id:'modo',label:'Modo (0 carga / 1 descarga)',min:0,max:1,step:1,value:0,dec:0},
+    {id:'modo',type:'btns',label:'Modo do circuito',opts:['⚡ carregar','⬇ descarregar'],value:0},
   ],
   init(S){ S.t=0; },
   update(S,dt){ S.t+=dt; },
@@ -1141,13 +1190,14 @@ SIMS.ciclotron={
   desc:'Carga com velocidade perpendicular a <b>B</b> (saindo da tela, ⊙) faz movimento circular: <code>F = q·v·B</code> é centrípeta, logo <code>r = m·v/(|q|·B)</code>. Inverta o sinal da carga e o giro inverte.',
   controls:[
     {id:'B',label:'Campo magnético B',min:0.2,max:5,step:0.1,value:1.5,unit:'T',dec:1,live:true},
-    {id:'v',label:'Velocidade',min:20,max:200,step:5,value:100,unit:'m/s',dec:0,live:true},
+    {id:'v',label:'Velocidade',min:20,max:200,step:5,value:100,unit:'m/s',dec:0,live:true,q:'vel'},
     {id:'q',label:'Carga (sinal importa)',min:-4,max:4,step:0.5,value:2,unit:'µC',dec:1,live:true},
+    {id:'m',label:'Massa da partícula',min:0.5,max:6,step:0.1,value:2,unit:'µg',dec:1,live:true},
   ],
   init(S){ S.x=W/2+120; S.y=H/2; S.ang=Math.PI/2; S.trail=[]; },
   update(S,dt){
     const q=S.p.q===0?0.5:S.p.q;
-    const r=2.0*S.p.v/(Math.abs(q)*S.p.B); // escala visual
+    const r=1.0*S.p.m*S.p.v/(Math.abs(q)*S.p.B); // escala visual
     const w=(S.p.v*1.4)/r*Math.sign(q);
     S.ang+=w*dt;
     // centro do círculo perpendicular à velocidade
@@ -1189,6 +1239,107 @@ SIMS.ciclotron={
       {k:'período',v:fmt(T)+' s'},
     ];}
 };
+
+
+/* ================== FÓRMULAS AO VIVO ================== */
+/* Cada função devolve [ [fórmula simbólica, substituição numérica], ... ] */
+const FORMULAS={
+  projetil:S=>{const vy=(S.vy??0)-S.p.g*(S.t??0);return [
+    ['x = v₀cosθ·t',`${fmt(S.vx??0,1)}×${fmt(S.t??0,2)} = ${fmt(S.x??0,1)} m`],
+    ['y = h₀ + v₀senθ·t − ½gt²',`${fmt(S.p.h0,0)} + ${fmt(S.vy??0,1)}×${fmt(S.t??0,2)} − ½×${fmt(S.p.g,1)}×${fmt(S.t??0,2)}² = ${fmt(S.y??0,1)} m`],
+    ['A = vₓ·t_voo',`${fmt(S.vx??0,1)}×${fmt(S.tf??0,2)} = ${fmt(S.range??0,1)} m`],
+  ];},
+  inclinado:S=>{const th=S.p.ang*Math.PI/180,g=S.p.g,N=S.p.m*g*Math.cos(th);return [
+    ['a = g(senθ − μcosθ)',`${fmt(g,1)}×(${fmt(Math.sin(th),2)} − ${fmt(S.p.mu,2)}×${fmt(Math.cos(th),2)}) = ${fmt(S.a??0,2)} m/s²`],
+    ['N = m·g·cosθ',`${fmt(S.p.m,1)}×${fmt(g,1)}×${fmt(Math.cos(th),2)} = ${fmt(N,1)} N`],
+    ['F_at = μ·N',`${fmt(S.p.mu,2)}×${fmt(N,1)} = ${fmt(S.p.mu*N,1)} N`],
+  ];},
+  colisao:S=>{const v1=(S.u1??0)/30,v2=(S.u2??0)/30;return [
+    ['p = m₁v₁ + m₂v₂',`${fmt(S.p.m1,1)}×${fmt(v1,1)} + ${fmt(S.p.m2,1)}×${fmt(v2,1)} = ${fmt(S.p.m1*v1+S.p.m2*v2,2)} kg·m/s`],
+    ['Ec = ½m₁v₁² + ½m₂v₂²',`½×${fmt(S.p.m1,1)}×${fmt(v1,1)}² + ½×${fmt(S.p.m2,1)}×${fmt(v2,1)}² = ${fmt(.5*S.p.m1*v1*v1+.5*S.p.m2*v2*v2,1)} J`],
+  ];},
+  pendulo:S=>{const T=2*Math.PI*Math.sqrt(S.p.L/S.p.g);return [
+    ['T = 2π√(L/g)',`2π×√(${fmt(S.p.L,1)}/${fmt(S.p.g,1)}) = ${fmt(T,2)} s`],
+    ['v = |ω|·L',`${fmt(Math.abs(S.w??0),2)}×${fmt(S.p.L,1)} = ${fmt(Math.abs(S.w??0)*S.p.L,2)} m/s`],
+  ];},
+  mola:S=>{const w=Math.sqrt(S.p.k/S.p.m),phi=S.p.phi*Math.PI/180,x=S.p.A*Math.cos(w*(S.t??0)+phi),v=-S.p.A*w*Math.sin(w*(S.t??0)+phi);return [
+    ['ω = √(k/m)',`√(${S.p.k}/${fmt(S.p.m,1)}) = ${fmt(w,2)} rad/s`],
+    ['x(t) = A·cos(ωt + φ)',`${fmt(S.p.A,2)}×cos(${fmt(w,2)}×${fmt(S.t??0,1)} + ${S.p.phi}°) = ${fmt(x,2)} m`],
+    ['v(t) = −Aω·sen(ωt + φ)',`= ${fmt(v,2)} m/s`],
+  ];},
+  gas:S=>{const P=S.p.n*8.314*S.p.T/(S.p.V/1000)/1000;return [
+    ['P = nRT/V',`${fmt(S.p.n,1)}×8.314×${S.p.T}/${fmt(S.p.V/1000,3)} = ${fmt(P,1)} kPa`],
+    ['U = (3/2)nRT',`1.5×${fmt(S.p.n,1)}×8.314×${S.p.T} = ${fmt(1.5*S.p.n*8.314*S.p.T,0)} J`],
+  ];},
+  lei1:S=>{const st=SIMS.lei1.calc(S,S.p.x);return [
+    ['ΔU = Q − W',`${fmt(st.Q,0)} − ${fmt(st.W,0)} = ${fmt(st.dU,0)} J`],
+    ['T = PV/nR',`${fmt(st.P/1000,1)}kPa × ${fmt(st.V*1000,1)}L → T = ${fmt(st.T,0)} K`],
+  ];},
+  maquina:S=>{const etaC=1-S.p.Tc/S.p.Th,eta=Math.min(S.p.eta/100,etaC),Wk=eta*S.p.Qh;return [
+    ['η_Carnot = 1 − Tc/Th',`1 − ${S.p.Tc}/${S.p.Th} = ${fmt(etaC*100,1)} %`],
+    ['W = η·Q_h',`${fmt(eta,2)}×${S.p.Qh} = ${fmt(Wk,0)} J`],
+    ['Q_c = Q_h − W',`${S.p.Qh} − ${fmt(Wk,0)} = ${fmt(S.p.Qh-Wk,0)} J`],
+  ];},
+  lei2:S=>{const Th=Math.max(S.p.Th,S.p.Tc),Tc=Math.min(S.p.Th,S.p.Tc);return [
+    ['dS/dt = q(1/T_f − 1/T_q)',`${S.p.q}×(1/${Tc} − 1/${Th}) = ${fmt(S.rate??0,3)} J/K·s`],
+  ];},
+  som:S=>{const v=[343,1480,5960][S.p.meio];return [
+    ['λ = v/f',`${v}/${S.p.f} = ${fmt(v/S.p.f,3)} m`],
+    ['T = 1/f',`1/${S.p.f} = ${fmt(1000/S.p.f,2)} ms`],
+  ];},
+  ondas:S=>[
+    ['f_bat = |f₁ − f₂|',`|${fmt(S.p.f1,2)} − ${fmt(S.p.f2,2)}| = ${fmt(Math.abs(S.p.f1-S.p.f2),2)} Hz`],
+    ['A_máx = A₁ + A₂',`${S.p.a1} + ${S.p.a2} = ${S.p.a1+S.p.a2} px`],
+  ],
+  pressao:S=>{const Ph=S.p.rho*S.p.g*S.p.h/1000;return [
+    ['P = ρ·g·h',`${S.p.rho}×${fmt(S.p.g,1)}×${fmt(S.p.h,1)} = ${fmt(Ph,1)} kPa`],
+    ['P_abs = P₀ + ρgh',`${fmt(S.p.P0,0)} + ${fmt(Ph,1)} = ${fmt(Ph+S.p.P0,1)} kPa`],
+  ];},
+  hidro:S=>{const v2=S.p.A1*S.p.v1/S.p.A2,dP=.5*S.p.rho*(v2*v2-S.p.v1*S.p.v1)/1000;return [
+    ['v₂ = A₁v₁/A₂',`${S.p.A1}×${fmt(S.p.v1,1)}/${S.p.A2} = ${fmt(v2,2)} m/s`],
+    ['ΔP = ½ρ(v₂² − v₁²)',`½×${S.p.rho}×(${fmt(v2,2)}² − ${fmt(S.p.v1,1)}²) = ${fmt(dP,2)} kPa`],
+  ];},
+  empuxo:S=>{const flu=S.p.ro<S.p.rl;return [
+    ['fração sub. = ρ_obj/ρ_líq',`${S.p.ro}/${S.p.rl} = ${fmt(S.p.ro/S.p.rl,2)}${flu?' ('+fmt(100*S.p.ro/S.p.rl,0)+'% imerso)':' → afunda'}`],
+    ['E = ρ_líq·V_sub·g','empuxo equilibra o peso quando flutua'],
+  ];},
+  calor:S=>{const C1=S.p.m1*S.p.c1,C2=S.p.m2*S.p.c2,teq=(C1*S.p.T1+C2*S.p.T2)/(C1+C2);return [
+    ['T_eq = ΣmcT/Σmc',`(${fmt(C1,0)}×${S.p.T1} + ${fmt(C2,0)}×${S.p.T2})/(${fmt(C1,0)}+${fmt(C2,0)}) = ${fmt(teq,1)} °C`],
+    ['Q₁ = m₁c₁ΔT',`${fmt(S.p.m1,1)}×${S.p.c1}×(${fmt(teq-S.p.T1,1)}) = ${fmt(C1*(teq-S.p.T1)/1000,1)} kJ`],
+  ];},
+  campo:S=>{const d=S.p.d/100,F=8.99e9*Math.abs(S.p.q1*S.p.q2)*1e-12/(d*d);return [
+    ['F = k|q₁q₂|/d²',`8.99e9×|${fmt(S.p.q1,1)}×${fmt(S.p.q2,1)}|µC²/${fmt(d,1)}² = ${fmt(F*1000,2)} mN`],
+    ['E = k·q/r²','vetores da grade = soma vetorial das duas cargas'],
+  ];},
+  campoB:S=>{const dm=S.p.d/100,FL=2e-7*Math.abs(S.p.I1*S.p.I2)/dm;return [
+    ['F/L = μ₀I₁I₂/(2πd)',`2e-7×${Math.abs(S.p.I1)}×${Math.abs(S.p.I2)}/${fmt(dm,2)} = ${fmt(FL*1e6,2)} µN/m`],
+    ['B = μ₀I/(2πr)',`fio 1 a ${fmt(dm/2,2)} m: ${fmt(2e-7*Math.abs(S.p.I1)/(dm/2)*1e6,2)} µT`],
+  ];},
+  rc:S=>{const tau=S.p.R*1000*S.p.C*1e-6,t=S.t??0;
+    const V=S.p.modo?S.p.V0*Math.exp(-t/tau):S.p.V0*(1-Math.exp(-t/tau));
+    return [
+    ['τ = R·C',`${S.p.R}kΩ×${S.p.C}µF = ${fmt(tau,2)} s`],
+    [S.p.modo?'V(t) = V₀·e^(−t/τ)':'V(t) = V₀(1−e^(−t/τ))',
+     S.p.modo?`${fmt(S.p.V0,1)}×e^(−${fmt(t,1)}/${fmt(tau,2)}) = ${fmt(V,2)} V`
+             :`${fmt(S.p.V0,1)}×(1−e^(−${fmt(t,1)}/${fmt(tau,2)})) = ${fmt(V,2)} V`],
+    ['q = C·V',`${S.p.C}×${fmt(V,2)} = ${fmt(S.p.C*V,0)} µC`],
+  ];},
+  ciclotron:S=>{const q=Math.abs(S.p.q===0?0.5:S.p.q);return [
+    ['F = |q|·v·B',`${fmt(q,1)}×${S.p.v}×${fmt(S.p.B,1)} = ${fmt(q*S.p.v*S.p.B,1)} µN`],
+    ['r = m·v/(|q|·B)',`${fmt(S.p.m,1)}×${S.p.v}/(${fmt(q,1)}×${fmt(S.p.B,1)}) = ${fmt(S.p.m*S.p.v/(q*S.p.B),0)} (escala visual)`],
+  ];},
+};
+
+function renderFormulas(){
+  const box=document.getElementById('formulas');
+  const fn=FORMULAS[currentSimId];
+  if(!fn){box.innerHTML='';return;}
+  let list;
+  try{ list=fn(S); }catch(e){ return; }
+  box.innerHTML=list.map(f=>
+    `<div class="fx"><span class="sym">${f[0]}</span><span class="arw">→</span><span class="sub">${f[1]}</span></div>`
+  ).join('');
+}
 
 /* ================== UI ================== */
 const MODULES={
