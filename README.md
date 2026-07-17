@@ -56,21 +56,6 @@ A física interna roda **sempre em SI** — a conversão acontece apenas na cama
 
 ---
 
-## 🚀 Instalação (Google Apps Script)
-
-1. Acesse [script.new](https://script.new) para criar um novo projeto.
-2. No arquivo `Código.gs`, apague o conteúdo e cole o do **`Code.gs`**.
-3. Clique em **+ → HTML** e crie um arquivo chamado exatamente **`Index`** (sem extensão no editor).
-4. Cole nele o conteúdo do **`Index.html`**.
-5. Vá em **Implantar → Nova implantação → App da Web**:
-   - Executar como: **Eu**
-   - Quem pode acessar: **Qualquer pessoa**
-6. Copie a URL gerada e pronto — o laboratório tá no ar. 🎉
-
-> 💡 Durante o desenvolvimento, use **Implantar → Testar implantações** para ver as alterações sem precisar criar uma nova versão a cada mudança.
-
----
-
 ## 🕹️ Como usar
 
 - **Abas** no topo alternam entre Física 1, 2 e 3 (cada módulo tem sua cor).
