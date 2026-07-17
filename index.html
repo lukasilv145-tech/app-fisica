@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LabFísica — Simulador de Experimentos</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1220; --panel:#141b2d; --panel2:#101728; --line:#26314d;
+    --text:#e8edf7; --muted:#8fa0be;
+    --f1:#ffb454; --f2:#4fd6e3; --f3:#a78bfa;
+    --accent:var(--f1);
+    --mono:'IBM Plex Mono',monospace; --disp:'Space Grotesk',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--disp);
+    background-image:
+      linear-gradient(rgba(120,150,200,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,150,200,.06) 1px, transparent 1px);
+    background-size:28px 28px;
+    min-height:100vh;
+  }
+  header{padding:22px 24px 10px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  header h1{font-size:1.5rem;letter-spacing:.5px}
+  header h1 span{color:var(--accent);transition:color .3s}
+  header .sub{color:var(--muted);font-family:var(--mono);font-size:.78rem}
+
+  .tabs{display:flex;gap:8px;padding:10px 24px 0;flex-wrap:wrap}
+  .tab{
+    background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    padding:8px 18px;border-radius:8px 8px 0 0;cursor:pointer;font-family:var(--disp);
+    font-weight:700;font-size:.9rem;border-bottom:none;
+  }
+  .tab.active{color:var(--text);border-color:var(--accent);border-bottom:2px solid var(--accent);background:var(--panel)}
+  .tab .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px}
+  .tab[data-mod="f1"] .dot{background:var(--f1)}
+  .tab[data-mod="f2"] .dot{background:var(--f2)}
+  .tab[data-mod="f3"] .dot{background:var(--f3)}
+
+  .chips{display:flex;gap:8px;padding:12px 24px;flex-wrap:wrap}
+  .chip{
+    background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:6px 14px;border-radius:999px;cursor:pointer;font-family:var(--mono);font-size:.78rem;
+  }
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .chip.active{border-color:var(--accent);color:var(--accent);background:rgba(255,255,255,.03)}
+
+  .main{display:grid;grid-template-columns:1fr 300px;gap:16px;padding:0 24px 28px;align-items:start}
+  @media(max-width:900px){.main{grid-template-columns:1fr}}
+
+  .stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .stage-head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .stage-head h2{font-size:1rem}
+  .stage-head .btns{display:flex;gap:8px}
+  button.act{
+    background:var(--accent);color:#0d1220;border:none;border-radius:7px;padding:7px 14px;
+    font-family:var(--disp);font-weight:700;font-size:.82rem;cursor:pointer;
+  }
+  button.ghost{
+    background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:7px;
+    padding:7px 12px;font-family:var(--mono);font-size:.78rem;cursor:pointer;
+  }
+  button.ghost:hover{color:var(--text);border-color:var(--accent)}
+  canvas{display:block;width:100%;height:auto;background:var(--panel2)}
+  .desc{padding:12px 14px;border-top:1px solid var(--line);color:var(--muted);font-size:.84rem;line-height:1.5}
+  .desc b{color:var(--text)}
+  .desc code{font-family:var(--mono);color:var(--accent);font-size:.8rem}
+
+  .side{display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h3{font-size:.75rem;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}
+  .ctrl{margin-bottom:14px}
+  .ctrl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.76rem;color:var(--muted);margin-bottom:5px}
+  .ctrl label .val{color:var(--accent);font-weight:600}
+  input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+  select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:.78rem;padding:6px 8px;border-radius:7px;cursor:pointer}
+  .uni{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .uni .ctrl{margin-bottom:0}
+  .reads{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .read{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .read .k{font-family:var(--mono);font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .read .v{font-family:var(--mono);font-size:.95rem;color:var(--accent);font-weight:600;margin-top:2px}
+  footer{padding:0 24px 24px;color:var(--muted);font-family:var(--mono);font-size:.7rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lab<span>Física</span></h1>
+  <div class="sub">// simulador de experimentos — física 1 · 2 · 3</div>
+</header>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-mod="f1"><span class="dot"></span>Física 1 · Mecânica</button>
+  <button class="tab" data-mod="f2"><span class="dot"></span>Física 2 · Termo, Fluidos e Ondas</button>
+  <button class="tab" data-mod="f3"><span class="dot"></span>Física 3 · Eletromagnetismo</button>
+</div>
+
+<div class="chips" id="chips"></div>
+
+<div class="main">
+  <div class="stage">
+    <div class="stage-head">
+      <h2 id="simTitle">—</h2>
+      <div class="btns">
+        <button class="ghost" id="btnPause">⏸ pausar</button>
+        <button class="act" id="btnReset">↻ reiniciar</button>
+      </div>
+    </div>
+    <canvas id="cv" width="900" height="520"></canvas>
+    <div class="desc" id="simDesc"></div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h3>Parâmetros</h3>
+      <div id="controls"></div>
+    </div>
+    <div class="card">
+      <h3>Medições</h3>
+      <div class="reads" id="reads"></div>
+    </div>
+    <div class="card">
+      <h3>Unidades</h3>
+      <div class="uni" id="units"></div>
+    </div>
+  </div>
+</div>
+
+<footer>labfísica v2.0 — apps script edition · unidades conversíveis no painel lateral · arraste os sliders e observe as medições em tempo real</footer>
+<script>
+/* ================== ENGINE ================== */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const COLORS={f1:'#ffb454',f2:'#4fd6e3',f3:'#a78bfa'};
+let currentMod='f1', currentSim=null, S={}, tSim=0, running=true, lastTs=0;
+
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function setAccent(mod){document.documentElement.style.setProperty('--accent',COLORS[mod])}
+
+function fmt(x,d=2){return (Math.abs(x)>=1000?x.toFixed(0):x.toFixed(d))}
+
+/* ---- sistema de unidades: física interna sempre em SI, conversão só na exibição ---- */
+const UNIT_DEFS={
+  vel:{label:'velocidade',opts:[['m/s',v=>v],['km/h',v=>v*3.6],['ft/s',v=>v*3.28084]]},
+  temp:{label:'temperatura',opts:[['K',v=>v],['°C',v=>v-273.15],['°F',v=>(v-273.15)*1.8+32]]},
+  press:{label:'pressão',opts:[['kPa',v=>v],['atm',v=>v/101.325],['mmHg',v=>v*7.50062],['psi',v=>v*0.145038]]},
+  dist:{label:'distância',opts:[['m',v=>v],['cm',v=>v*100],['km',v=>v/1000]]},
+  energy:{label:'energia',opts:[['J',v=>v],['kJ',v=>v/1000],['cal',v=>v/4.186]]},
+  force:{label:'força',opts:[['N',v=>v],['kgf',v=>v/9.80665],['dyn',v=>v*1e5]]},
+};
+const UNIT_SEL={vel:0,temp:0,press:0,dist:0,energy:0,force:0};
+function U(q,val,dec){const o=UNIT_DEFS[q].opts[UNIT_SEL[q]];return fmt(o[1](val),dec??2)+' '+o[0];}
+function buildUnits(){
+  const box=document.getElementById('units');
+  box.innerHTML=Object.keys(UNIT_DEFS).map(q=>`<div class="ctrl"><label>${UNIT_DEFS[q].label}</label>
+    <select data-q="${q}">${UNIT_DEFS[q].opts.map((o,i)=>`<option value="${i}">${o[0]}</option>`).join('')}</select></div>`).join('');
+  box.querySelectorAll('select').forEach(s=>s.onchange=()=>{UNIT_SEL[s.dataset.q]=+s.value;});
+}
+
+function buildControls(sim){
+  const box=document.getElementById('controls'); box.innerHTML='';
+  sim.controls.forEach(c=>{
+    const div=document.createElement('div'); div.className='ctrl';
+    div.innerHTML=`<label>${c.label}<span class="val" id="val_${c.id}"></span></label>
+      <input type="range" id="in_${c.id}" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.value}">`;
+    box.appendChild(div);
+    const inp=div.querySelector('input');
+    const upd=()=>{ S.p[c.id]=parseFloat(inp.value);
+      document.getElementById('val_'+c.id).textContent=fmt(S.p[c.id],c.dec??2)+(c.unit?' '+c.unit:'');
+      if(!c.live) resetSim(); };
+    inp.addEventListener('input',upd);
+    S.p[c.id]=c.value;
+    document.getElementById('val_'+c.id).textContent=fmt(c.value,c.dec??2)+(c.unit?' '+c.unit:'');
+  });
+}
+
+function renderReads(list){
+  const box=document.getElementById('reads');
+  if(box.children.length!==list.length){
+    box.innerHTML=list.map((r,i)=>`<div class="read"><div class="k">${r.k}</div><div class="v" id="rv_${i}">—</div></div>`).join('');
+  }
+  list.forEach((r,i)=>{const el=document.getElementById('rv_'+i); if(el) el.textContent=r.v;});
+}
+
+function resetSim(){ tSim=0; currentSim.init(S); }
+
+function loadSim(id){
+  currentSim=SIMS[id];
+  S={p:{}};
+  document.getElementById('simTitle').textContent=currentSim.title;
+  document.getElementById('simDesc').innerHTML=currentSim.desc;
+  buildControls(currentSim);
+  resetSim();
+  document.querySelectorAll('.chip').forEach(ch=>ch.classList.toggle('active',ch.dataset.sim===id));
+  running=true; document.getElementById('btnPause').textContent='⏸ pausar';
+}
+
+function loop(ts){
+  const dt=Math.min(0.033,(ts-lastTs)/1000||0.016); lastTs=ts;
+  if(running){ tSim+=dt; currentSim.update(S,dt); }
+  ctx.clearRect(0,0,W,H);
+  grid();
+  currentSim.draw(ctx,S);
+  renderReads(currentSim.read(S));
+  requestAnimationFrame(loop);
+}
+function grid(){
+  ctx.strokeStyle='rgba(120,150,200,.08)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+function arrow(x,y,dx,dy,color){
+  const len=Math.hypot(dx,dy); if(len<1)return;
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();
+  const a=Math.atan2(dy,dx);
+  ctx.beginPath();ctx.moveTo(x+dx,y+dy);
+  ctx.lineTo(x+dx-8*Math.cos(a-0.4),y+dy-8*Math.sin(a-0.4));
+  ctx.lineTo(x+dx-8*Math.cos(a+0.4),y+dy-8*Math.sin(a+0.4));
+  ctx.closePath();ctx.fill();
+}
+function txt(s,x,y,c,size=13,align='left'){
+  ctx.fillStyle=c||css('--muted'); ctx.font=size+'px IBM Plex Mono'; ctx.textAlign=align; ctx.fillText(s,x,y); ctx.textAlign='left';
+}
+
+/* ================== SIMULAÇÕES ================== */
+const SIMS={};
+
+/* ---------- FÍSICA 1 ---------- */
+
+SIMS.projetil={
+  title:'Lançamento Oblíquo', mod:'f1',
+  desc:'Um projétil lançado com velocidade <b>v₀</b> e ângulo <b>θ</b>. Trajetória parabólica: <code>y = x·tanθ − g·x²/(2v₀²cos²θ)</code>. Alcance máximo em θ = 45°. Ignora resistência do ar.',
+  controls:[
+    {id:'v0',label:'Velocidade inicial',min:5,max:50,step:1,value:25,unit:'m/s',dec:0},
+    {id:'ang',label:'Ângulo',min:5,max:85,step:1,value:45,unit:'°',dec:0},
+    {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1},
+  ],
+  init(S){ S.t=0; S.trail=[]; S.done=false;
+    const a=S.p.ang*Math.PI/180;
+    S.vx=S.p.v0*Math.cos(a); S.vy=S.p.v0*Math.sin(a);
+    S.range=S.p.v0*S.p.v0*Math.sin(2*a)/S.p.g;
+    S.hmax=(S.p.v0*Math.sin(a))**2/(2*S.p.g);
+    S.tf=2*S.p.v0*Math.sin(a)/S.p.g;
+    S.scale=Math.min((W-120)/Math.max(S.range,10),(H-140)/Math.max(S.hmax,10));
+  },
+  update(S,dt){ if(S.done)return; S.t+=dt;
+    if(S.t>=S.tf){S.t=S.tf;S.done=true;}
+    S.x=S.vx*S.t; S.y=S.vy*S.t-0.5*S.p.g*S.t*S.t;
+    S.trail.push([S.x,S.y]); if(S.trail.length>600)S.trail.shift();
+  },
+  draw(c,S){
+    const ox=60, oy=H-70, sc=S.scale;
+    c.strokeStyle=css('--line'); c.lineWidth=2;
+    c.beginPath();c.moveTo(0,oy);c.lineTo(W,oy);c.stroke();
+    // trajetória prevista
+    c.strokeStyle='rgba(255,180,84,.25)'; c.setLineDash([4,5]); c.beginPath();
+    for(let i=0;i<=60;i++){const t=S.tf*i/60, x=S.vx*t, y=S.vy*t-0.5*S.p.g*t*t;
+      i?c.lineTo(ox+x*sc,oy-y*sc):c.moveTo(ox+x*sc,oy-y*sc);}
+    c.stroke(); c.setLineDash([]);
+    // rastro
+    c.fillStyle=COLORS.f1;
+    S.trail.forEach((p,i)=>{if(i%4==0){c.globalAlpha=.35;c.beginPath();c.arc(ox+p[0]*sc,oy-p[1]*sc,2.5,0,7);c.fill();}});
+    c.globalAlpha=1;
+    // projétil + vetores
+    const px=ox+S.x*sc, py=oy-S.y*sc;
+    const vy=S.vy-S.p.g*S.t;
+    arrow(px,py,S.vx*2.2,0,'#6ee7a0'); arrow(px,py,0,-vy*2.2,'#ff7b9c');
+    c.fillStyle=COLORS.f1;c.beginPath();c.arc(px,py,8,0,7);c.fill();
+    txt('alcance: '+fmt(S.range,1)+' m',ox,oy+30,null,12);
+    txt('vx',px+S.vx*2.2+6,py+4,'#6ee7a0',11);
+    txt('vy',px+6,py-vy*2.2-6,'#ff7b9c',11);
+  },
+  read(S){ const vy=S.vy-S.p.g*S.t;
+    return [
+      {k:'tempo',v:fmt(S.t)+' s'},{k:'altura',v:U('dist',S.y)},
+      {k:'alcance x',v:U('dist',S.x,1)},{k:'vy',v:U('vel',vy)},
+      {k:'h máx',v:U('dist',S.hmax,1)},{k:'t voo',v:fmt(S.tf)+' s'},
+    ];}
+};
+
+SIMS.inclinado={
+  title:'Plano Inclinado com Atrito', mod:'f1',
+  desc:'Bloco sobre rampa de ângulo <b>θ</b> com coeficiente de atrito <b>μ</b>. Aceleração: <code>a = g(senθ − μ·cosθ)</code>. Se <code>tanθ ≤ μ</code>, o atrito estático segura o bloco.',
+  controls:[
+    {id:'ang',label:'Ângulo da rampa',min:5,max:60,step:1,value:30,unit:'°',dec:0},
+    {id:'mu',label:'Coef. de atrito μ',min:0,max:1.2,step:0.02,value:0.2},
+    {id:'m',label:'Massa',min:1,max:20,step:0.5,value:5,unit:'kg',dec:1},
+  ],
+  init(S){ S.s=0; S.v=0; },
+  update(S,dt){
+    const th=S.p.ang*Math.PI/180, g=9.8;
+    S.static=Math.tan(th)<=S.p.mu && S.v===0;
+    S.a=S.static?0:g*(Math.sin(th)-S.p.mu*Math.cos(th));
+    if(S.a<0&&S.v<=0){S.a=0;S.v=0;S.static=true;}
+    S.v+=S.a*dt; S.s+=S.v*dt;
+    if(S.s>18){S.s=0;S.v=0;}
+  },
+  draw(c,S){
+    const th=S.p.ang*Math.PI/180;
+    const bx=120, by=H-80, len=W-260;
+    const topx=bx, topy=by-len*Math.tan(th);
+    // rampa
+    c.fillStyle='rgba(120,150,200,.08)'; c.strokeStyle=css('--line');
+    c.beginPath();c.moveTo(bx,by);c.lineTo(bx+len,by);c.lineTo(topx,Math.max(topy,40));c.closePath();c.fill();c.stroke();
+    // bloco desce ao longo da rampa
+    const L=Math.hypot(len,by-Math.max(topy,40));
+    const f=Math.min(S.s/18,1);
+    const px=topx+(len)*f*(L/L), py=Math.max(topy,40)+(by-Math.max(topy,40))*f;
+    c.save(); c.translate(px,py); c.rotate(Math.atan2(by-Math.max(topy,40),len));
+    c.fillStyle=COLORS.f1; c.fillRect(-22,-34,44,30);
+    c.restore();
+    // vetores
+    const g=9.8, N=S.p.m*g*Math.cos(th), P=S.p.m*g, Fat=S.p.mu*N;
+    arrow(px,py-20,0,P*3,'#ff7b9c');
+    arrow(px,py-20,Math.sin(th)*N*3,-Math.cos(th)*N*3,'#6ee7a0');
+    txt('P',px+6,py+P*3-24,'#ff7b9c',11);
+    txt('N',px+Math.sin(th)*N*3+6,py-Math.cos(th)*N*3-24,'#6ee7a0',11);
+    txt('θ = '+S.p.ang+'°',bx+len-90,by-12,null,13);
+    if(S.static) txt('EQUILÍBRIO ESTÁTICO (tanθ ≤ μ)',bx,60,COLORS.f1,14);
+  },
+  read(S){ const th=S.p.ang*Math.PI/180,g=9.8;
+    return [
+      {k:'aceleração',v:fmt(S.a)+' m/s²'},{k:'velocidade',v:U('vel',S.v)},
+      {k:'normal N',v:U('force',S.p.m*g*Math.cos(th),1)},{k:'atrito',v:U('force',S.p.mu*S.p.m*g*Math.cos(th),1)},
+      {k:'peso',v:U('force',S.p.m*g,1)},{k:'estado',v:S.static?'parado':'deslizando'},
+    ];}
+};
+
+SIMS.colisao={
+  title:'Colisões 1D', mod:'f1',
+  desc:'Dois blocos colidem numa pista. <b>e</b> é o coeficiente de restituição: <code>e = 1</code> → elástica (energia conservada), <code>e = 0</code> → perfeitamente inelástica. Momento <code>p = m·v</code> sempre se conserva.',
+  controls:[
+    {id:'m1',label:'Massa 1',min:1,max:10,step:0.5,value:2,unit:'kg',dec:1},
+    {id:'m2',label:'Massa 2',min:1,max:10,step:0.5,value:5,unit:'kg',dec:1},
+    {id:'v1',label:'Velocidade 1',min:-8,max:8,step:0.5,value:5,unit:'m/s',dec:1},
+    {id:'v2',label:'Velocidade 2',min:-8,max:8,step:0.5,value:-2,unit:'m/s',dec:1},
+    {id:'e',label:'Restituição e',min:0,max:1,step:0.05,value:1},
+  ],
+  init(S){ S.x1=200; S.x2=650; S.u1=S.p.v1*30; S.u2=S.p.v2*30; S.stuck=false; },
+  update(S,dt){
+    const r1=14+S.p.m1*2.5, r2=14+S.p.m2*2.5;
+    S.x1+=S.u1*dt; S.x2+=S.u2*dt;
+    if(S.x1-r1<40){S.x1=40+r1;S.u1=Math.abs(S.u1);}
+    if(S.x2+r2>W-40){S.x2=W-40-r2;S.u2=-Math.abs(S.u2);}
+    if(S.x1+r1>W-40){S.x1=W-40-r1;S.u1=-Math.abs(S.u1);}
+    if(S.x2-r2<40){S.x2=40+r2;S.u2=Math.abs(S.u2);}
+    if(S.x2-S.x1<r1+r2 && S.u1>S.u2){
+      const m1=S.p.m1,m2=S.p.m2,e=S.p.e,u1=S.u1,u2=S.u2;
+      S.u1=(m1*u1+m2*u2+m2*e*(u2-u1))/(m1+m2);
+      S.u2=(m1*u1+m2*u2+m1*e*(u1-u2))/(m1+m2);
+      S.x1=S.x2-(r1+r2)-1;
+    }
+  },
+  draw(c,S){
+    const y=H/2, r1=14+S.p.m1*2.5, r2=14+S.p.m2*2.5;
+    c.strokeStyle=css('--line');c.lineWidth=2;
+    c.beginPath();c.moveTo(30,y+40);c.lineTo(W-30,y+40);c.stroke();
+    c.fillStyle=COLORS.f1;c.beginPath();c.arc(S.x1,y,r1,0,7);c.fill();
+    c.fillStyle='#4fd6e3';c.beginPath();c.arc(S.x2,y,r2,0,7);c.fill();
+    arrow(S.x1,y-r1-14,S.u1*0.8,0,COLORS.f1);
+    arrow(S.x2,y-r2-14,S.u2*0.8,0,'#4fd6e3');
+    txt('m₁',S.x1-8,y+5,'#0d1220',13); txt('m₂',S.x2-8,y+5,'#0d1220',13);
+  },
+  read(S){ const v1=S.u1/30,v2=S.u2/30;
+    const p=S.p.m1*v1+S.p.m2*v2, ke=0.5*S.p.m1*v1*v1+0.5*S.p.m2*v2*v2;
+    return [
+      {k:'v₁',v:U('vel',v1)},{k:'v₂',v:U('vel',v2)},
+      {k:'p total',v:fmt(p)+' kg·m/s'},{k:'E cinética',v:U('energy',ke,1)},
+    ];}
+};
+
+SIMS.pendulo={
+  title:'Pêndulo Simples', mod:'f1',
+  desc:'Equação real (não linearizada): <code>θ̈ = −(g/L)·senθ</code>. Para ângulos pequenos, período <code>T ≈ 2π√(L/g)</code> — note que <b>não depende da massa</b>.',
+  controls:[
+    {id:'L',label:'Comprimento',min:0.5,max:4,step:0.1,value:2,unit:'m',dec:1},
+    {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1},
+    {id:'th0',label:'Ângulo inicial',min:5,max:80,step:1,value:40,unit:'°',dec:0},
+  ],
+  init(S){ S.th=S.p.th0*Math.PI/180; S.w=0; },
+  update(S,dt){
+    const steps=4;
+    for(let i=0;i<steps;i++){
+      S.w+=-(S.p.g/S.p.L)*Math.sin(S.th)*(dt/steps);
+      S.th+=S.w*(dt/steps);
+    }
+  },
+  draw(c,S){
+    const ox=W/2, oy=90, sc=100;
+    const px=ox+Math.sin(S.th)*S.p.L*sc, py=oy+Math.cos(S.th)*S.p.L*sc;
+    c.strokeStyle='rgba(120,150,200,.3)';c.setLineDash([3,5]);
+    c.beginPath();c.moveTo(ox,oy);c.lineTo(ox,oy+S.p.L*sc+40);c.stroke();c.setLineDash([]);
+    c.strokeStyle=css('--muted');c.lineWidth=2;
+    c.beginPath();c.moveTo(ox,oy);c.lineTo(px,py);c.stroke();
+    c.fillStyle=css('--line');c.beginPath();c.arc(ox,oy,6,0,7);c.fill();
+    c.fillStyle=COLORS.f1;c.beginPath();c.arc(px,py,16,0,7);c.fill();
+    // arco do ângulo
+    c.strokeStyle=COLORS.f1;c.beginPath();c.arc(ox,oy,44,Math.PI/2,Math.PI/2-S.th,S.th>0);c.stroke();
+    txt('θ = '+fmt(S.th*180/Math.PI,1)+'°',ox+52,oy+58,COLORS.f1,13);
+  },
+  read(S){
+    const T=2*Math.PI*Math.sqrt(S.p.L/S.p.g);
+    const v=Math.abs(S.w)*S.p.L;
+    return [
+      {k:'θ atual',v:fmt(S.th*180/Math.PI,1)+' °'},{k:'ω',v:fmt(S.w)+' rad/s'},
+      {k:'v tangencial',v:U('vel',v)},{k:'período T',v:fmt(T)+' s'},
+      {k:'frequência',v:fmt(1/T)+' Hz'},{k:'tempo',v:fmt(tSim,1)+' s'},
+    ];}
+};
+
+SIMS.mola={
+  title:'MHS — Sistema Massa-Mola', mod:'f1',
+  desc:'Movimento Harmônico Simples: <code>x(t) = A·cos(ωt)</code>, com <code>ω = √(k/m)</code>. Observe a troca contínua entre energia cinética e potencial elástica: <code>E = ½kA²</code> constante.',
+  controls:[
+    {id:'k',label:'Constante k',min:5,max:100,step:1,value:30,unit:'N/m',dec:0},
+    {id:'m',label:'Massa',min:0.5,max:10,step:0.1,value:2,unit:'kg',dec:1},
+    {id:'A',label:'Amplitude',min:0.2,max:1.5,step:0.05,value:1,unit:'m'},
+  ],
+  init(S){ S.t=0; },
+  update(S,dt){ S.t+=dt; },
+  draw(c,S){
+    const w=Math.sqrt(S.p.k/S.p.m);
+    const x=S.p.A*Math.cos(w*S.t);
+    const v=-S.p.A*w*Math.sin(w*S.t);
+    const eq=W/2, y=H/2-40, sc=180;
+    const px=eq+x*sc;
+    // parede + mola
+    c.fillStyle='rgba(120,150,200,.15)';c.fillRect(40,y-60,14,120);
+    c.strokeStyle=css('--muted');c.lineWidth=2;c.beginPath();c.moveTo(54,y);
+    const nCoil=12, springLen=px-30-54;
+    for(let i=0;i<=nCoil;i++){
+      c.lineTo(54+springLen*i/nCoil,y+(i%2?-14:14)*(i>0&&i<nCoil?1:0));
+    }
+    c.lineTo(px-30,y);c.stroke();
+    c.fillStyle=COLORS.f1;c.fillRect(px-30,y-30,60,60);
+    // linha de equilíbrio
+    c.strokeStyle='rgba(255,180,84,.3)';c.setLineDash([3,5]);
+    c.beginPath();c.moveTo(eq,y-80);c.lineTo(eq,y+80);c.stroke();c.setLineDash([]);
+    txt('x = 0',eq-18,y-90,null,11);
+    // barras de energia
+    const E=0.5*S.p.k*S.p.A*S.p.A, KE=0.5*S.p.m*v*v, PE=0.5*S.p.k*x*x;
+    const bx=W/2-160, by=H-100;
+    txt('E cinética',bx,by-8,'#6ee7a0',11); txt('E potencial',bx+170,by-8,'#ff7b9c',11);
+    c.fillStyle='rgba(120,150,200,.1)';c.fillRect(bx,by,140,18);c.fillRect(bx+170,by,140,18);
+    c.fillStyle='#6ee7a0';c.fillRect(bx,by,140*KE/E,18);
+    c.fillStyle='#ff7b9c';c.fillRect(bx+170,by,140*PE/E,18);
+  },
+  read(S){
+    const w=Math.sqrt(S.p.k/S.p.m);
+    const x=S.p.A*Math.cos(w*S.t), v=-S.p.A*w*Math.sin(w*S.t);
+    return [
+      {k:'posição x',v:U('dist',x)},{k:'velocidade',v:U('vel',v)},
+      {k:'ω',v:fmt(w)+' rad/s'},{k:'período',v:fmt(2*Math.PI/w)+' s'},
+      {k:'E total',v:U('energy',0.5*S.p.k*S.p.A**2,1)},{k:'tempo',v:fmt(S.t,1)+' s'},
+    ];}
+};
+
+/* ---------- FÍSICA 2 ---------- */
+
+SIMS.gas={
+  title:'Gás Ideal no Pistão', mod:'f2',
+  desc:'Gás ideal em cilindro com pistão: <code>P·V = n·R·T</code>. Aumente <b>T</b> e veja as partículas acelerarem (v ∝ √T); comprima <b>V</b> e a pressão sobe. n = 1 mol fixo.',
+  controls:[
+    {id:'T',label:'Temperatura',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true},
+    {id:'V',label:'Volume',min:5,max:40,step:1,value:20,unit:'L',dec:0,live:true},
+  ],
+  init(S){
+    S.parts=[];
+    for(let i=0;i<70;i++){
+      const a=Math.random()*7;
+      S.parts.push({x:Math.random(),y:Math.random(),dx:Math.cos(a),dy:Math.sin(a)});
+    }
+  },
+  update(S,dt){
+    const spd=0.25*Math.sqrt(S.p.T/300);
+    S.parts.forEach(p=>{
+      p.x+=p.dx*spd*dt; p.y+=p.dy*spd*dt;
+      if(p.x<0){p.x=0;p.dx*=-1} if(p.x>1){p.x=1;p.dx*=-1}
+      if(p.y<0){p.y=0;p.dy*=-1} if(p.y>1){p.y=1;p.dy*=-1}
+    });
+  },
+  draw(c,S){
+    const maxW=W-300, cw=maxW*S.p.V/40, ch=300, ox=140, oy=(H-ch)/2;
+    // cilindro
+    c.strokeStyle=css('--line');c.lineWidth=3;
+    c.strokeRect(ox,oy,cw,ch);
+    // pistão
+    c.fillStyle='rgba(79,214,227,.25)';c.fillRect(ox+cw,oy,26,ch);
+    c.strokeStyle=COLORS.f2;c.strokeRect(ox+cw,oy,26,ch);
+    c.fillStyle=css('--muted');c.fillRect(ox+cw+26,oy+ch/2-5,80,10);
+    // partículas coloridas pela temperatura
+    const heat=Math.min(1,(S.p.T-100)/800);
+    const col=`rgb(${100+155*heat},${150-60*heat},${255-180*heat})`;
+    c.fillStyle=col;
+    S.parts.forEach(p=>{c.beginPath();c.arc(ox+p.x*cw,oy+p.y*ch,4,0,7);c.fill();});
+    const P=8.314*S.p.T/(S.p.V/1000)/1000; // kPa
+    txt('P = '+fmt(P,0)+' kPa',ox,oy-14,COLORS.f2,14);
+  },
+  read(S){
+    const P=8.314*S.p.T/(S.p.V/1000)/1000;
+    return [
+      {k:'pressão',v:U('press',P,1)},{k:'volume',v:S.p.V+' L'},
+      {k:'temperatura',v:U('temp',S.p.T,0)},{k:'PV/T (=nR)',v:fmt(P*1000*(S.p.V/1000)/S.p.T,2)+' J/K'},
+      {k:'E interna',v:U('energy',1.5*8.314*S.p.T,0)},{k:'n',v:'1 mol'},
+    ];}
+};
+
+SIMS.ondas={
+  title:'Superposição de Ondas', mod:'f2',
+  desc:'Duas ondas na mesma corda: <code>y = A₁sen(k₁x − ω₁t) + A₂sen(k₂x − ω₂t)</code>. Com frequências próximas surgem <b>batimentos</b>; com A₁ = A₂ e sentidos opostos, ondas estacionárias.',
+  controls:[
+    {id:'f1',label:'Frequência 1',min:0.2,max:3,step:0.05,value:1,unit:'Hz',live:true},
+    {id:'a1',label:'Amplitude 1',min:0,max:60,step:2,value:40,unit:'px',dec:0,live:true},
+    {id:'f2',label:'Frequência 2',min:0.2,max:3,step:0.05,value:1.2,unit:'Hz',live:true},
+    {id:'a2',label:'Amplitude 2',min:0,max:60,step:2,value:40,unit:'px',dec:0,live:true},
+    {id:'dir',label:'Sentido onda 2 (−1 inverte)',min:-1,max:1,step:2,value:1,dec:0,live:true},
+  ],
+  init(S){},
+  update(S,dt){},
+  draw(c,S){
+    const y1=110,y2=230,y3=390;
+    const k=0.025;
+    const wave=(A,f,dir,x)=>A*Math.sin(k*x*f*2 - dir*2*Math.PI*f*tSim);
+    const plot=(fn,yBase,color,lw)=>{
+      c.strokeStyle=color;c.lineWidth=lw;c.beginPath();
+      for(let x=0;x<=W;x+=4){const y=yBase-fn(x); x?c.lineTo(x,y):c.moveTo(x,y);}
+      c.stroke();
+    };
+    plot(x=>wave(S.p.a1,S.p.f1,1,x),y1,'rgba(79,214,227,.6)',1.5);
+    plot(x=>wave(S.p.a2,S.p.f2,S.p.dir,x),y2,'rgba(167,139,250,.6)',1.5);
+    plot(x=>wave(S.p.a1,S.p.f1,1,x)+wave(S.p.a2,S.p.f2,S.p.dir,x),y3,COLORS.f2,2.5);
+    txt('onda 1',10,y1-70,'rgba(79,214,227,.8)',12);
+    txt('onda 2',10,y2-70,'rgba(167,139,250,.8)',12);
+    txt('resultante (superposição)',10,y3-95,COLORS.f2,12);
+  },
+  read(S){
+    return [
+      {k:'batimento',v:fmt(Math.abs(S.p.f1-S.p.f2))+' Hz'},
+      {k:'A máx possível',v:fmt(S.p.a1+S.p.a2,0)+' px'},
+      {k:'modo',v:S.p.dir<0?'contrárias':'mesmo sentido'},
+      {k:'tempo',v:fmt(tSim,1)+' s'},
+    ];}
+};
+
+SIMS.empuxo={
+  title:'Empuxo — Princípio de Arquimedes', mod:'f2',
+  desc:'<code>E = ρ_líq · V_sub · g</code>. Se o objeto é menos denso que o líquido, flutua com fração submersa <code>ρ_obj/ρ_líq</code>. Se for mais denso, afunda. Ajuste as densidades e veja.',
+  controls:[
+    {id:'ro',label:'Densidade do objeto',min:100,max:3000,step:50,value:600,unit:'kg/m³',dec:0},
+    {id:'rl',label:'Densidade do líquido',min:600,max:2000,step:50,value:1000,unit:'kg/m³',dec:0},
+  ],
+  init(S){ S.y=100; S.v=0; },
+  update(S,dt){
+    const g=9.8, size=70, surf=200, bottom=H-60;
+    const top=S.y, bot=S.y+size;
+    let sub=0;
+    if(bot>surf) sub=Math.min(bot-surf,size)/size;
+    const a=g*(1-(S.p.rl/S.p.ro)*sub)-1.2*S.v;
+    S.v+=a*dt*40; S.y+=S.v*dt;
+    if(S.y+size>bottom){S.y=bottom-size;S.v=0;}
+  },
+  draw(c,S){
+    const surf=200, size=70;
+    // líquido
+    c.fillStyle='rgba(79,214,227,.15)';c.fillRect(0,surf,W,H-surf-40);
+    c.strokeStyle=COLORS.f2;c.lineWidth=2;
+    c.beginPath();c.moveTo(0,surf);c.lineTo(W,surf);c.stroke();
+    c.fillStyle='rgba(120,150,200,.2)';c.fillRect(0,H-40,W,40);
+    // objeto
+    const x=W/2-size/2;
+    c.fillStyle=COLORS.f1;c.fillRect(x,S.y,size,size);
+    // forças
+    const cx=W/2, cy=S.y+size/2;
+    const bot=S.y+size; let sub=0; if(bot>surf)sub=Math.min(bot-surf,size)/size;
+    arrow(cx,cy,0,60,'#ff7b9c'); txt('P',cx+8,cy+58,'#ff7b9c',12);
+    if(sub>0){arrow(cx,cy,0,-60*(S.p.rl/S.p.ro)*sub,'#6ee7a0');txt('E',cx+8,cy-60*(S.p.rl/S.p.ro)*sub,'#6ee7a0',12);}
+    txt('superfície do líquido',12,surf-8,COLORS.f2,11);
+  },
+  read(S){
+    const flu=S.p.ro<S.p.rl;
+    return [
+      {k:'comportamento',v:flu?'flutua':'afunda'},
+      {k:'fração submersa',v:flu?fmt(100*S.p.ro/S.p.rl,0)+' %':'100 %'},
+      {k:'ρ obj / ρ líq',v:fmt(S.p.ro/S.p.rl,2)},
+      {k:'velocidade',v:fmt(S.v,1)+' px/s'},
+    ];}
+};
+
+SIMS.calor={
+  title:'Calorimetria — Equilíbrio Térmico', mod:'f2',
+  desc:'Dois corpos em contato trocam calor até <code>T_eq = (m₁c₁T₁ + m₂c₂T₂)/(m₁c₁ + m₂c₂)</code>. Quem tem maior capacidade térmica (m·c) "puxa" o equilíbrio pro seu lado. Q cedido = Q recebido.',
+  controls:[
+    {id:'m1',label:'Massa corpo 1',min:0.1,max:5,step:0.1,value:1,unit:'kg',dec:1},
+    {id:'c1',label:'Calor específico 1',min:100,max:4200,step:50,value:900,unit:'J/kg·K',dec:0},
+    {id:'T1',label:'Temp. inicial 1',min:0,max:100,step:1,value:90,unit:'°C',dec:0},
+    {id:'m2',label:'Massa corpo 2',min:0.1,max:5,step:0.1,value:2,unit:'kg',dec:1},
+    {id:'c2',label:'Calor específico 2',min:100,max:4200,step:50,value:4200,unit:'J/kg·K',dec:0},
+    {id:'T2',label:'Temp. inicial 2',min:0,max:100,step:1,value:20,unit:'°C',dec:0},
+  ],
+  init(S){ S.t1=S.p.T1; S.t2=S.p.T2; },
+  update(S,dt){
+    const C1=S.p.m1*S.p.c1, C2=S.p.m2*S.p.c2;
+    const teq=(C1*S.t1+C2*S.t2)/(C1+C2);
+    const rate=0.6;
+    S.t1+=(teq-S.t1)*rate*dt*3;
+    S.t2+=(teq-S.t2)*rate*dt*3;
+  },
+  draw(c,S){
+    const tc=t=>{const f=Math.max(0,Math.min(1,t/100));return `rgb(${60+195*f},${90+40*(1-f)},${255-200*f})`;};
+    const y=H/2-70;
+    c.fillStyle=tc(S.t1);c.fillRect(W/2-220,y,180,140);
+    c.fillStyle=tc(S.t2);c.fillRect(W/2+40,y,180,140);
+    c.strokeStyle=css('--line');c.strokeRect(W/2-220,y,180,140);c.strokeRect(W/2+40,y,180,140);
+    // contato / fluxo
+    c.fillStyle='rgba(255,255,255,.15)';c.fillRect(W/2-40,y+40,80,60);
+    if(Math.abs(S.t1-S.t2)>0.5){
+      const dir=S.t1>S.t2?1:-1;
+      const off=(tSim*60)%40;
+      for(let i=0;i<3;i++) arrow(W/2-30*dir+((off+i*14)%40-20)*dir,y+70,18*dir,0,'#ffd27a');
+    }
+    txt('corpo 1',W/2-220,y-12,null,12); txt('corpo 2',W/2+40,y-12,null,12);
+    txt(fmt(S.t1,1)+' °C',W/2-130,y+75,'#0d1220',18,'center');
+    txt(fmt(S.t2,1)+' °C',W/2+130,y+75,'#0d1220',18,'center');
+  },
+  read(S){
+    const C1=S.p.m1*S.p.c1, C2=S.p.m2*S.p.c2;
+    const teq=(C1*S.p.T1+C2*S.p.T2)/(C1+C2);
+    const Q=C1*Math.abs(S.p.T1-teq);
+    return [
+      {k:'T corpo 1',v:U('temp',S.t1+273.15,1)},{k:'T corpo 2',v:U('temp',S.t2+273.15,1)},
+      {k:'T equilíbrio',v:U('temp',teq+273.15,1)},{k:'Q trocado',v:U('energy',Q,0)},
+      {k:'m₁c₁',v:fmt(C1,0)+' J/K'},{k:'m₂c₂',v:fmt(C2,0)+' J/K'},
+    ];}
+};
+
+
+SIMS.som={
+  title:'Propagação do Som', mod:'f2',
+  desc:'Onda <b>longitudinal</b>: as partículas do meio oscilam na mesma direção da propagação, criando compressões e rarefações. <code>v = λ·f</code>. Velocidade depende do meio: ar ≈ 343, água ≈ 1480, aço ≈ 5960 m/s. Animação em câmera lenta (~100×).',
+  controls:[
+    {id:'meio',label:'Meio (0 ar · 1 água · 2 aço)',min:0,max:2,step:1,value:0,dec:0,live:true},
+    {id:'f',label:'Frequência',min:200,max:2000,step:20,value:600,unit:'Hz',dec:0,live:true},
+    {id:'A',label:'Amplitude',min:2,max:14,step:1,value:8,unit:'px',dec:0,live:true},
+  ],
+  init(S){},
+  update(S,dt){},
+  draw(c,S){
+    const meios=[['AR',343,'#8fa0be'],['ÁGUA',1480,'#4fd6e3'],['AÇO',5960,'#c0c8d8']];
+    const [nome,v,col]=meios[S.p.meio];
+    const lam=v/S.p.f;            // m
+    const lamPx=lam*300;          // escala 300 px/m
+    const k=2*Math.PI/lamPx, w=2*Math.PI*S.p.f/100; // câmera lenta 100x
+    for(let i=0;i<70;i++){
+      const x0=20+i*(W-40)/70;
+      const dx=S.p.A*Math.sin(k*x0-w*tSim);
+      for(let j=0;j<11;j++){
+        const y=90+j*30;
+        c.fillStyle=col; c.globalAlpha=.85;
+        c.beginPath();c.arc(x0+dx,y,3,0,7);c.fill();
+      }
+    }
+    c.globalAlpha=1;
+    // envelope de deslocamento
+    c.strokeStyle=COLORS.f2;c.lineWidth=2;c.beginPath();
+    for(let x=0;x<=W;x+=4){
+      const y=H-70-S.p.A*2.4*Math.sin(k*x-w*tSim);
+      x?c.lineTo(x,y):c.moveTo(x,y);
+    }
+    c.stroke();
+    txt('meio: '+nome+' · v = '+v+' m/s',20,40,COLORS.f2,14);
+    txt('deslocamento das partículas →',20,H-110,null,11);
+    if(lamPx<W){
+      c.strokeStyle='rgba(255,210,122,.6)';c.beginPath();c.moveTo(60,60);c.lineTo(60+lamPx,60);c.stroke();
+      txt('λ',60+lamPx/2-5,54,'#ffd27a',12);
+    } else txt('λ maior que a tela nessa escala kkk',W-320,60,'#ffd27a',12);
+  },
+  read(S){
+    const v=[343,1480,5960][S.p.meio];
+    return [
+      {k:'velocidade',v:U('vel',v,0)},{k:'λ',v:U('dist',v/S.p.f,3)},
+      {k:'frequência',v:S.p.f+' Hz'},{k:'período',v:fmt(1000/S.p.f,2)+' ms'},
+    ];}
+};
+
+SIMS.pressao={
+  title:'Pressão Hidrostática', mod:'f2',
+  desc:'Lei de Stevin: <code>P = P₀ + ρ·g·h</code>. A pressão cresce linearmente com a profundidade e não depende do formato do recipiente. Repare nas setas: a pressão atua em <b>todas as direções</b>.',
+  controls:[
+    {id:'rho',label:'Densidade do líquido',min:600,max:13600,step:100,value:1000,unit:'kg/m³',dec:0,live:true},
+    {id:'h',label:'Profundidade do sensor',min:0,max:10,step:0.1,value:5,unit:'m',dec:1,live:true},
+    {id:'g',label:'Gravidade',min:1.6,max:24.8,step:0.1,value:9.8,unit:'m/s²',dec:1,live:true},
+  ],
+  init(S){},
+  update(S,dt){},
+  draw(c,S){
+    const top=90, bot=H-50, tx=180, twd=W-360;
+    const pxPerM=(bot-top)/10;
+    // tanque
+    c.fillStyle='rgba(79,214,227,.13)';c.fillRect(tx,top,twd,bot-top);
+    c.strokeStyle=css('--line');c.lineWidth=3;
+    c.beginPath();c.moveTo(tx,top);c.lineTo(tx,bot);c.lineTo(tx+twd,bot);c.lineTo(tx+twd,top);c.stroke();
+    c.strokeStyle=COLORS.f2;c.beginPath();c.moveTo(tx,top);c.lineTo(tx+twd,top);c.stroke();
+    // gradiente de setas nas paredes
+    for(let d=1;d<=9;d+=2){
+      const y=top+d*pxPerM, len=6+d*3.4;
+      arrow(tx-8,y,len,0,'rgba(79,214,227,.55)');
+      arrow(tx+twd+8,y,-len,0,'rgba(79,214,227,.55)');
+    }
+    // sensor
+    const sy=top+S.p.h*pxPerM, sx=tx+twd/2;
+    c.strokeStyle='rgba(255,180,84,.4)';c.setLineDash([4,5]);
+    c.beginPath();c.moveTo(sx,top);c.lineTo(sx,sy);c.stroke();c.setLineDash([]);
+    c.fillStyle=COLORS.f1;c.beginPath();c.arc(sx,sy,10,0,7);c.fill();
+    const L=10+S.p.rho*S.p.g*S.p.h/12000;
+    [[L,0],[-L,0],[0,L],[0,-L]].forEach(v=>arrow(sx,sy,v[0],v[1],'#ffd27a'));
+    txt('h = '+fmt(S.p.h,1)+' m',sx+16,(top+sy)/2,COLORS.f1,13);
+    txt('P₀ = 101,3 kPa (atm)',tx,top-14,null,12);
+  },
+  read(S){
+    const Ph=S.p.rho*S.p.g*S.p.h/1000;      // kPa
+    return [
+      {k:'P hidrostática',v:U('press',Ph,1)},{k:'P absoluta',v:U('press',Ph+101.325,1)},
+      {k:'coluna d’água equiv.',v:U('dist',Ph*1000/(1000*9.8),2)},
+      {k:'F em 10 cm²',v:U('force',(Ph+101.325)*1000*0.001,1)},
+    ];}
+};
+
+SIMS.hidro={
+  title:'Hidrodinâmica — Continuidade e Bernoulli', mod:'f2',
+  desc:'Tubo de Venturi. Continuidade: <code>A₁v₁ = A₂v₂</code> (o que estreita, acelera). Bernoulli: <code>P + ½ρv² + ρgh = cte</code> → onde a velocidade sobe, a pressão <b>cai</b> (veja os manômetros).',
+  controls:[
+    {id:'A1',label:'Área A₁',min:20,max:100,step:2,value:60,unit:'cm²',dec:0,live:true},
+    {id:'A2',label:'Área A₂',min:5,max:60,step:1,value:20,unit:'cm²',dec:0,live:true},
+    {id:'v1',label:'Velocidade v₁',min:0.5,max:5,step:0.1,value:2,unit:'m/s',dec:1,live:true},
+    {id:'rho',label:'Densidade',min:700,max:1300,step:25,value:1000,unit:'kg/m³',dec:0,live:true},
+  ],
+  init(S){ S.parts=Array.from({length:46},()=>Math.random()); },
+  update(S,dt){
+    const v2=S.p.A1*S.p.v1/S.p.A2;
+    S.parts=S.parts.map(s=>{
+      const v=s<0.45?S.p.v1:(s<0.6?S.p.v1+(v2-S.p.v1)*(s-0.45)/0.15:v2);
+      s+=v*dt*0.06; return s>1?s-1:s;
+    });
+  },
+  draw(c,S){
+    const cy=H/2+60, x0=60, x1=W-60;
+    const r1=Math.max(14,S.p.A1*0.9), r2=Math.max(8,S.p.A2*0.9);
+    const xa=x0+(x1-x0)*0.45, xb=x0+(x1-x0)*0.6;
+    const rAt=s=>{const x=x0+(x1-x0)*s; if(x<xa)return r1; if(x>xb)return r2; return r1+(r2-r1)*(x-xa)/(xb-xa);};
+    // tubo
+    c.strokeStyle=css('--muted');c.lineWidth=2.5;
+    [-1,1].forEach(sg=>{
+      c.beginPath();c.moveTo(x0,cy+sg*r1);c.lineTo(xa,cy+sg*r1);c.lineTo(xb,cy+sg*r2);c.lineTo(x1,cy+sg*r2);c.stroke();
+    });
+    c.fillStyle='rgba(79,214,227,.1)';
+    c.beginPath();c.moveTo(x0,cy-r1);c.lineTo(xa,cy-r1);c.lineTo(xb,cy-r2);c.lineTo(x1,cy-r2);
+    c.lineTo(x1,cy+r2);c.lineTo(xb,cy+r2);c.lineTo(xa,cy+r1);c.lineTo(x0,cy+r1);c.closePath();c.fill();
+    // partículas
+    c.fillStyle=COLORS.f2;
+    S.parts.forEach((s,i)=>{
+      const x=x0+(x1-x0)*s, r=rAt(s)*0.75;
+      const y=cy+Math.sin(i*2.4)*r;
+      c.beginPath();c.arc(x,y,3.4,0,7);c.fill();
+    });
+    // manômetros (altura da coluna ∝ pressão relativa)
+    const v2=S.p.A1*S.p.v1/S.p.A2;
+    const P1=140, P2=Math.max(8,P1-0.5*S.p.rho*(v2*v2-S.p.v1*S.p.v1)/60);
+    const tube=(x,hgt,lbl)=>{
+      c.strokeStyle=css('--line');c.strokeRect(x-9,cy-r1-170,18,160);
+      c.fillStyle='rgba(79,214,227,.5)';c.fillRect(x-8,cy-r1-10-Math.min(hgt,158),16,Math.min(hgt,158));
+      txt(lbl,x-8,cy-r1-180,null,12);
+    };
+    tube(x0+(x1-x0)*0.22,P1,'P₁'); tube(x0+(x1-x0)*0.8,P2,'P₂');
+    if(v2>15) txt('v₂ alta demais — cavitação vibes kkk',x0,H-24,'#ff7b9c',12);
+  },
+  read(S){
+    const v2=S.p.A1*S.p.v1/S.p.A2;
+    const dP=0.5*S.p.rho*(v2*v2-S.p.v1*S.p.v1)/1000; // kPa
+    const Q=S.p.A1*1e-4*S.p.v1;
+    return [
+      {k:'v₂',v:U('vel',v2)},{k:'vazão Q',v:fmt(Q*1000,2)+' L/s'},
+      {k:'queda de pressão',v:U('press',dP,2)},{k:'A₁/A₂',v:fmt(S.p.A1/S.p.A2,2)},
+    ];}
+};
+
+SIMS.lei1={
+  title:'1ª Lei da Termodinâmica', mod:'f2',
+  desc:'<code>ΔU = Q − W</code> (W = trabalho realizado <b>pelo</b> gás). Escolha a transformação e arraste o progresso: <b>isotérmica</b> (ΔU=0), <b>isobárica</b> (P cte), <b>isocórica</b> (W=0) ou <b>adiabática</b> (Q=0). Gás monoatômico, n = 1 mol.',
+  controls:[
+    {id:'tipo',label:'Transformação (0 isot · 1 isob · 2 isoc · 3 adiab)',min:0,max:3,step:1,value:0,dec:0,live:true},
+    {id:'x',label:'Progresso do processo',min:-1,max:1,step:0.02,value:0.6,live:true},
+  ],
+  init(S){},
+  calc(S,x){
+    const n=1,R=8.314,Cv=1.5*R,Cp=2.5*R,g=5/3;
+    const P0=1e5,V0=0.02,T0=P0*V0/(n*R);
+    let V=V0,P=P0,T=T0,Q=0,Wk=0;
+    const t=S.p.tipo;
+    if(t===0){V=V0*(1+0.75*x);T=T0;P=n*R*T/V;Wk=n*R*T0*Math.log(V/V0);Q=Wk;}
+    else if(t===1){V=V0*(1+0.75*x);P=P0;T=P*V/(n*R);Wk=P*(V-V0);Q=n*Cp*(T-T0);}
+    else if(t===2){T=T0*(1+0.6*x);V=V0;P=n*R*T/V;Wk=0;Q=n*Cv*(T-T0);}
+    else {V=V0*(1+0.75*x);T=T0*Math.pow(V0/V,g-1);P=n*R*T/V;Q=0;Wk=n*Cv*(T0-T);}
+    return {V,P,T,Q,W:Wk,dU:Q-Wk};
+  },
+  update(S,dt){},
+  draw(c,S){
+    const names=['ISOTÉRMICA','ISOBÁRICA','ISOCÓRICA','ADIABÁTICA'];
+    const gx=90,gy=H-70,gw=W-420,gh=H-150;
+    const Vmax=0.045,Pmax=4e5;
+    const X=V=>gx+gw*V/Vmax, Y=P=>gy-gh*P/Pmax;
+    c.strokeStyle=css('--line');c.lineWidth=2;
+    c.beginPath();c.moveTo(gx,gy-gh);c.lineTo(gx,gy);c.lineTo(gx+gw,gy);c.stroke();
+    txt('V (L)',gx+gw-30,gy+22,null,12); txt('P',gx-24,gy-gh,null,12);
+    // caminho A → estado atual
+    c.strokeStyle=COLORS.f2;c.lineWidth=2.5;c.beginPath();
+    for(let i=0;i<=80;i++){
+      const st=this.calc(S,S.p.x*i/80);
+      i?c.lineTo(X(st.V),Y(st.P)):c.moveTo(X(st.V),Y(st.P));
+    }
+    c.stroke();
+    const A=this.calc(S,0), B=this.calc(S,S.p.x);
+    c.fillStyle=css('--muted');c.beginPath();c.arc(X(A.V),Y(A.P),6,0,7);c.fill();
+    c.fillStyle=COLORS.f2;c.beginPath();c.arc(X(B.V),Y(B.P),7,0,7);c.fill();
+    txt('A',X(A.V)+10,Y(A.P)-8,null,13); txt('B',X(B.V)+10,Y(B.P)-8,COLORS.f2,13);
+    txt(names[S.p.tipo],gx,gy-gh-16,COLORS.f2,15);
+    // pistão lateral
+    const px=W-260, pw=200, ph=120, py=110;
+    const frac=B.V/Vmax;
+    c.strokeStyle=css('--line');c.strokeRect(px,py,pw,ph);
+    c.fillStyle='rgba(79,214,227,.18)';c.fillRect(px,py,pw*frac*1.6,ph);
+    c.fillStyle=css('--muted');c.fillRect(px+pw*frac*1.6,py,10,ph);
+    txt('T = '+fmt(B.T,0)+' K',px,py+ph+22,null,12);
+    // setas Q e W
+    if(Math.abs(B.Q)>1) arrow(px+60,py+ph+60,0,-30*Math.sign(B.Q),'#ffd27a');
+    if(Math.abs(B.Q)>1) txt('Q '+(B.Q>0?'entra':'sai'),px+72,py+ph+52,'#ffd27a',12);
+    if(Math.abs(B.W)>1) arrow(px+160,py+ph+45,26*Math.sign(B.W),0,'#6ee7a0');
+    if(Math.abs(B.W)>1) txt('W '+(B.W>0?'pelo gás':'sobre o gás'),px+80,py+ph+90,'#6ee7a0',12);
+  },
+  read(S){
+    const st=this.calc(S,S.p.x);
+    return [
+      {k:'Q',v:U('energy',st.Q,0)},{k:'W (pelo gás)',v:U('energy',st.W,0)},
+      {k:'ΔU = Q − W',v:U('energy',st.dU,0)},{k:'T final',v:U('temp',st.T,0)},
+      {k:'P final',v:U('press',st.P/1000,1)},{k:'V final',v:fmt(st.V*1000,1)+' L'},
+    ];}
+};
+
+SIMS.maquina={
+  title:'Máquina Térmica', mod:'f2',
+  desc:'Recebe <b>Q_h</b> da fonte quente, converte parte em trabalho <b>W = η·Q_h</b> e rejeita <b>Q_c</b> pra fonte fria. Limite de Carnot: <code>η_máx = 1 − T_c/T_h</code>. Tente colocar η acima do limite e veja a 2ª lei reclamar kkk.',
+  controls:[
+    {id:'Th',label:'T fonte quente',min:400,max:1200,step:10,value:800,unit:'K',dec:0,live:true},
+    {id:'Tc',label:'T fonte fria',min:200,max:400,step:5,value:300,unit:'K',dec:0,live:true},
+    {id:'Qh',label:'Q_h por ciclo',min:100,max:1000,step:25,value:500,unit:'J',dec:0,live:true},
+    {id:'eta',label:'Eficiência η pretendida',min:5,max:95,step:1,value:40,unit:'%',dec:0,live:true},
+  ],
+  init(S){ S.ang=0; },
+  update(S,dt){
+    const etaC=1-S.p.Tc/S.p.Th;
+    const eta=Math.min(S.p.eta/100,etaC);
+    S.ang+=dt*(1+eta*6);
+  },
+  draw(c,S){
+    const cx=W/2, etaC=1-S.p.Tc/S.p.Th;
+    const viola=S.p.eta/100>etaC;
+    const eta=viola?etaC:S.p.eta/100;
+    const Wk=eta*S.p.Qh, Qc=S.p.Qh-Wk;
+    // reservatórios
+    c.fillStyle='rgba(255,123,156,.2)';c.fillRect(cx-160,40,320,64);
+    c.strokeStyle='#ff7b9c';c.strokeRect(cx-160,40,320,64);
+    txt('FONTE QUENTE · '+S.p.Th+' K',cx,80,'#ff7b9c',14,'center');
+    c.fillStyle='rgba(79,214,227,.2)';c.fillRect(cx-160,H-104,320,64);
+    c.strokeStyle='#4fd6e3';c.strokeRect(cx-160,H-104,320,64);
+    txt('FONTE FRIA · '+S.p.Tc+' K',cx,H-64,'#4fd6e3',14,'center');
+    // motor (volante girando)
+    const my=H/2;
+    c.strokeStyle=COLORS.f2;c.lineWidth=3;
+    c.beginPath();c.arc(cx,my,52,0,7);c.stroke();
+    for(let i=0;i<4;i++){
+      const a=S.ang+i*Math.PI/2;
+      c.beginPath();c.moveTo(cx,my);c.lineTo(cx+46*Math.cos(a),my+46*Math.sin(a));c.stroke();
+    }
+    // fluxos com espessura proporcional
+    const wQh=6+S.p.Qh/60, wW=2+Wk/60, wQc=2+Qc/60;
+    c.lineWidth=wQh;c.strokeStyle='#ff7b9c';
+    c.beginPath();c.moveTo(cx,104);c.lineTo(cx,my-56);c.stroke();
+    arrow(cx,my-70,0,12,'#ff7b9c');
+    c.lineWidth=wQc;c.strokeStyle='#4fd6e3';
+    c.beginPath();c.moveTo(cx,my+56);c.lineTo(cx,H-108);c.stroke();
+    arrow(cx,H-120,0,12,'#4fd6e3');
+    c.lineWidth=wW;c.strokeStyle='#6ee7a0';
+    c.beginPath();c.moveTo(cx+56,my);c.lineTo(cx+200,my);c.stroke();
+    arrow(cx+186,my,14,0,'#6ee7a0');
+    c.lineWidth=1;
+    txt('Q_h = '+fmt(S.p.Qh,0)+' J',cx+16,(104+my-56)/2,'#ff7b9c',13);
+    txt('Q_c = '+fmt(Qc,0)+' J',cx+16,(my+56+H-108)/2,'#4fd6e3',13);
+    txt('W = '+fmt(Wk,0)+' J',cx+90,my-14,'#6ee7a0',13);
+    if(viola){
+      txt('⚠ η > η_Carnot: IMPOSSÍVEL (2ª lei) — limitado a '+fmt(etaC*100,1)+'%',60,H/2-120,'#ff7b9c',15);
+    }
+  },
+  read(S){
+    const etaC=1-S.p.Tc/S.p.Th;
+    const eta=Math.min(S.p.eta/100,etaC);
+    return [
+      {k:'η de Carnot',v:fmt(etaC*100,1)+' %'},{k:'η efetiva',v:fmt(eta*100,1)+' %'},
+      {k:'trabalho W',v:U('energy',eta*S.p.Qh,0)},{k:'Q_c rejeitado',v:U('energy',(1-eta)*S.p.Qh,0)},
+      {k:'T_h',v:U('temp',S.p.Th,0)},{k:'T_c',v:U('temp',S.p.Tc,0)},
+    ];}
+};
+
+SIMS.lei2={
+  title:'2ª Lei — Entropia', mod:'f2',
+  desc:'Calor flui espontaneamente do quente pro frio, e a entropia do universo só cresce: <code>dS = q(1/T_frio − 1/T_quente) ≥ 0</code>. Quanto maior a diferença de temperatura, mais entropia é gerada. Com T iguais: equilíbrio, dS = 0.',
+  controls:[
+    {id:'Th',label:'T corpo quente',min:250,max:1000,step:10,value:600,unit:'K',dec:0,live:true},
+    {id:'Tc',label:'T corpo frio',min:100,max:900,step:10,value:300,unit:'K',dec:0,live:true},
+    {id:'q',label:'Taxa de calor q',min:10,max:500,step:10,value:150,unit:'W',dec:0,live:true},
+  ],
+  init(S){ S.Stot=0; },
+  update(S,dt){
+    const Th=Math.max(S.p.Th,S.p.Tc), Tc=Math.min(S.p.Th,S.p.Tc);
+    S.rate=Th===Tc?0:S.p.q*(1/Tc-1/Th);
+    S.Stot+=S.rate*dt;
+  },
+  draw(c,S){
+    const Th=Math.max(S.p.Th,S.p.Tc), Tc=Math.min(S.p.Th,S.p.Tc);
+    const hotLeft=S.p.Th>=S.p.Tc;
+    const y=150, bw=200, bh=150;
+    const tcol=T=>{const f=Math.min(1,(T-100)/900);return `rgb(${70+185*f},${90+30*(1-f)},${255-200*f})`;};
+    c.fillStyle=tcol(S.p.Th);c.fillRect(80,y,bw,bh);
+    c.fillStyle=tcol(S.p.Tc);c.fillRect(W-80-bw,y,bw,bh);
+    c.strokeStyle=css('--line');c.strokeRect(80,y,bw,bh);c.strokeRect(W-80-bw,y,bw,bh);
+    txt(S.p.Th+' K',80+bw/2,y+bh/2+6,'#0d1220',18,'center');
+    txt(S.p.Tc+' K',W-80-bw/2,y+bh/2+6,'#0d1220',18,'center');
+    // barra condutora + pacotes de calor
+    const rx0=80+bw, rx1=W-80-bw, ry=y+bh/2;
+    c.fillStyle='rgba(120,150,200,.2)';c.fillRect(rx0,ry-14,rx1-rx0,28);
+    if(Th!==Tc){
+      const dir=hotLeft?1:-1;
+      for(let i=0;i<5;i++){
+        const f=((tSim*0.25*(S.p.q/150)+i/5)%1);
+        const x=hotLeft?rx0+(rx1-rx0)*f:rx1-(rx1-rx0)*f;
+        c.fillStyle='#ffd27a';c.beginPath();c.arc(x,ry,7,0,7);c.fill();
+      }
+      txt('fluxo espontâneo: quente → frio',W/2,y-16,'#ffd27a',13,'center');
+    } else txt('equilíbrio térmico · dS = 0',W/2,y-16,null,13,'center');
+    // medidor de entropia
+    const mx=120, my=H-120, mw=W-240;
+    txt('entropia gerada no universo (ΔS acumulada)',mx,my-10,COLORS.f2,12);
+    c.strokeStyle=css('--line');c.strokeRect(mx,my,mw,26);
+    c.fillStyle=COLORS.f2;
+    c.fillRect(mx,my,Math.min(mw,S.Stot*mw/30),26);
+  },
+  read(S){
+    const Th=Math.max(S.p.Th,S.p.Tc), Tc=Math.min(S.p.Th,S.p.Tc);
+    return [
+      {k:'dS/dt universo',v:fmt(S.rate,3)+' J/K·s'},
+      {k:'ΔS acumulada',v:fmt(S.Stot,2)+' J/K'},
+      {k:'dS quente',v:fmt(Th===Tc?0:-S.p.q/Th,3)+' J/K·s'},
+      {k:'dS frio',v:fmt(Th===Tc?0:S.p.q/Tc,3)+' J/K·s'},
+    ];}
+};
+
+/* ---------- FÍSICA 3 ---------- */
+
+SIMS.campo={
+  title:'Campo Elétrico de Duas Cargas', mod:'f3',
+  desc:'Vetores do campo <code>E = k·q/r²</code> gerado por duas cargas puntiformes. Cargas de sinais opostos formam um <b>dipolo</b>; de mesmo sinal, o campo se "repele" no meio. Brilho ∝ intensidade.',
+  controls:[
+    {id:'q1',label:'Carga 1',min:-5,max:5,step:0.5,value:3,unit:'µC',dec:1,live:true},
+    {id:'q2',label:'Carga 2',min:-5,max:5,step:0.5,value:-3,unit:'µC',dec:1,live:true},
+    {id:'d',label:'Separação',min:100,max:500,step:10,value:300,unit:'px',dec:0,live:true},
+  ],
+  init(S){},
+  update(S,dt){},
+  draw(c,S){
+    const c1={x:W/2-S.p.d/2,y:H/2,q:S.p.q1}, c2={x:W/2+S.p.d/2,y:H/2,q:S.p.q2};
+    for(let gx=40;gx<W;gx+=55){
+      for(let gy=40;gy<H;gy+=55){
+        let ex=0,ey=0;
+        [c1,c2].forEach(ch=>{
+          const dx=gx-ch.x, dy=gy-ch.y, r2=dx*dx+dy*dy;
+          if(r2<900) return;
+          const E=ch.q*40000/r2, r=Math.sqrt(r2);
+          ex+=E*dx/r; ey+=E*dy/r;
+        });
+        const mag=Math.hypot(ex,ey);
+        if(mag<0.05) continue;
+        const len=Math.min(22,6+Math.log(1+mag)*6);
+        const al=Math.min(1,0.15+mag/8);
+        arrow(gx,gy,ex/mag*len,ey/mag*len,`rgba(167,139,250,${al})`);
+      }
+    }
+    [c1,c2].forEach(ch=>{
+      c.fillStyle=ch.q>=0?'#ff7b9c':'#4fd6e3';
+      c.beginPath();c.arc(ch.x,ch.y,16+Math.abs(ch.q)*2,0,7);c.fill();
+      txt(ch.q>=0?'+':'−',ch.x,ch.y+6,'#0d1220',20,'center');
+    });
+  },
+  read(S){
+    const k=8.99e9, d=S.p.d/100; // px→m fictício
+    const F=k*Math.abs(S.p.q1*S.p.q2)*1e-12/(d*d);
+    return [
+      {k:'força (coulomb)',v:fmt(F*1000,2)+' mN'},
+      {k:'tipo',v:S.p.q1*S.p.q2<0?'atração':(S.p.q1*S.p.q2>0?'repulsão':'nula')},
+      {k:'configuração',v:S.p.q1*S.p.q2<0?'dipolo':'mesmo sinal'},
+      {k:'distância',v:fmt(S.p.d/100,1)+' m'},
+    ];}
+};
+
+SIMS.campoB={
+  title:'Campo Magnético — Fios Paralelos', mod:'f3',
+  desc:'Fio retilíneo gera campo circular: <code>B = μ₀·I/(2πr)</code> (regra da mão direita). ⊙ = corrente saindo da tela, ⊗ = entrando. Correntes no <b>mesmo sentido se atraem</b>, sentidos opostos se repelem: <code>F/L = μ₀·I₁·I₂/(2πd)</code>. Escala: 1 px = 1 cm.',
+  controls:[
+    {id:'I1',label:'Corrente I₁',min:-30,max:30,step:1,value:15,unit:'A',dec:0,live:true},
+    {id:'I2',label:'Corrente I₂',min:-30,max:30,step:1,value:15,unit:'A',dec:0,live:true},
+    {id:'d',label:'Distância entre fios',min:120,max:460,step:10,value:280,unit:'cm',dec:0,live:true},
+  ],
+  init(S){},
+  update(S,dt){},
+  draw(c,S){
+    const w1={x:W/2-S.p.d/2,y:H/2,I:S.p.I1}, w2={x:W/2+S.p.d/2,y:H/2,I:S.p.I2};
+    // grade de vetores B
+    for(let gx=40;gx<W;gx+=55){
+      for(let gy=40;gy<H;gy+=55){
+        let bx=0,by=0;
+        [w1,w2].forEach(wr=>{
+          if(wr.I===0)return;
+          const dx=gx-wr.x, dy=gy-wr.y, r=Math.hypot(dx,dy);
+          if(r<34) return;
+          const B=wr.I*30/r;         // escala visual
+          bx+=-dy/r*B; by+=dx/r*B;   // tangencial (anti-horário p/ I>0, ⊙)
+        });
+        const mag=Math.hypot(bx,by);
+        if(mag<0.06) continue;
+        const len=Math.min(22,5+Math.log(1+mag)*7);
+        const al=Math.min(1,0.15+mag/5);
+        arrow(gx,gy,bx/mag*len,by/mag*len,`rgba(167,139,250,${al})`);
+      }
+    }
+    // linhas de campo circulares em volta de cada fio
+    [w1,w2].forEach(wr=>{
+      if(wr.I===0)return;
+      c.strokeStyle='rgba(167,139,250,.22)';c.lineWidth=1.5;
+      for(let r=36;r<=110;r+=26){c.beginPath();c.arc(wr.x,wr.y,r,0,7);c.stroke();}
+    });
+    // fios
+    [w1,w2].forEach((wr,i)=>{
+      c.fillStyle=wr.I>=0?'#ff7b9c':'#4fd6e3';
+      c.beginPath();c.arc(wr.x,wr.y,17,0,7);c.fill();
+      c.strokeStyle='#0d1220';c.lineWidth=2;
+      if(wr.I>=0){c.fillStyle='#0d1220';c.beginPath();c.arc(wr.x,wr.y,4,0,7);c.fill();}
+      else{c.beginPath();c.moveTo(wr.x-7,wr.y-7);c.lineTo(wr.x+7,wr.y+7);c.moveTo(wr.x+7,wr.y-7);c.lineTo(wr.x-7,wr.y+7);c.stroke();}
+      txt('I'+(i+1)+' = '+wr.I+' A',wr.x-30,wr.y+42,null,12);
+    });
+    // força entre os fios
+    if(S.p.I1!==0&&S.p.I2!==0){
+      const attract=S.p.I1*S.p.I2>0;
+      const L=34;
+      arrow(w1.x+24,w1.y,attract?L:-L,0,'#6ee7a0');
+      arrow(w2.x-24,w2.y,attract?-L:L,0,'#6ee7a0');
+      txt(attract?'ATRAÇÃO (mesmo sentido)':'REPULSÃO (sentidos opostos)',W/2,60,'#6ee7a0',14,'center');
+    }
+  },
+  read(S){
+    const dm=S.p.d/100;                       // cm → m
+    const FL=2e-7*Math.abs(S.p.I1*S.p.I2)/dm; // N/m
+    const Bmid=Math.abs(2e-7*S.p.I1/(dm/2))+Math.abs(2e-7*S.p.I2/(dm/2));
+    return [
+      {k:'F/L entre fios',v:fmt(FL*1e6,2)+' µN/m'},
+      {k:'B no ponto médio (máx)',v:fmt(Bmid*1e6,2)+' µT'},
+      {k:'interação',v:S.p.I1*S.p.I2>0?'atração':(S.p.I1*S.p.I2<0?'repulsão':'nula')},
+      {k:'distância',v:U('dist',dm,2)},
+    ];}
+};
+
+SIMS.rc={
+  title:'Circuito RC — Carga do Capacitor', mod:'f3',
+  desc:'Capacitor carregando: <code>V(t) = V₀(1 − e^(−t/τ))</code>, descarregando: <code>V(t) = V₀·e^(−t/τ)</code>, onde <code>τ = R·C</code>. Após 1τ o capacitor atinge ~63% da carga; após 5τ, ~99%.',
+  controls:[
+    {id:'R',label:'Resistência',min:1,max:100,step:1,value:20,unit:'kΩ',dec:0},
+    {id:'C',label:'Capacitância',min:10,max:500,step:10,value:100,unit:'µF',dec:0},
+    {id:'V0',label:'Tensão da fonte',min:1,max:24,step:0.5,value:12,unit:'V',dec:1},
+    {id:'modo',label:'Modo (0 carga / 1 descarga)',min:0,max:1,step:1,value:0,dec:0},
+  ],
+  init(S){ S.t=0; },
+  update(S,dt){ S.t+=dt; },
+  draw(c,S){
+    const tau=S.p.R*1000*S.p.C*1e-6; // s
+    const Vf=t=>S.p.modo?S.p.V0*Math.exp(-t/tau):S.p.V0*(1-Math.exp(-t/tau));
+    // gráfico
+    const gx=90,gy=H-70,gw=W-160,gh=H-160;
+    c.strokeStyle=css('--line');c.lineWidth=2;
+    c.beginPath();c.moveTo(gx,gy-gh);c.lineTo(gx,gy);c.lineTo(gx+gw,gy);c.stroke();
+    const tMax=Math.max(5*tau,S.t*1.1);
+    // linha V0 e 63%
+    c.strokeStyle='rgba(167,139,250,.25)';c.setLineDash([4,5]);
+    c.beginPath();c.moveTo(gx,gy-gh*0.95);c.lineTo(gx+gw,gy-gh*0.95);c.stroke();
+    const y63=S.p.modo?gy-gh*0.95*0.37:gy-gh*0.95*0.63;
+    c.beginPath();c.moveTo(gx,y63);c.lineTo(gx+gw,y63);c.stroke();c.setLineDash([]);
+    txt('V₀ = '+S.p.V0+' V',gx+gw-120,gy-gh*0.95-8,'rgba(167,139,250,.7)',11);
+    txt(S.p.modo?'37%':'63% (t = τ)',gx+gw-120,y63-8,'rgba(167,139,250,.7)',11);
+    // curva
+    c.strokeStyle=COLORS.f3;c.lineWidth=2.5;c.beginPath();
+    for(let i=0;i<=200;i++){
+      const t=tMax*i/200, v=Vf(t);
+      const x=gx+gw*t/tMax, y=gy-gh*0.95*v/S.p.V0;
+      i?c.lineTo(x,y):c.moveTo(x,y);
+    }
+    c.stroke();
+    // cursor
+    const vNow=Vf(S.t);
+    const cx=gx+gw*Math.min(S.t/tMax,1), cy=gy-gh*0.95*vNow/S.p.V0;
+    c.fillStyle=COLORS.f3;c.beginPath();c.arc(cx,cy,7,0,7);c.fill();
+    txt('t (s)',gx+gw+8,gy+4,null,12); txt('V',gx-4,gy-gh-10,null,12);
+    // marca de tau
+    for(let n=1;n<=5;n++){
+      const x=gx+gw*(n*tau)/tMax; if(x>gx+gw)break;
+      c.strokeStyle='rgba(120,150,200,.25)';c.beginPath();c.moveTo(x,gy);c.lineTo(x,gy-8);c.stroke();
+      txt(n+'τ',x-8,gy+18,null,11);
+    }
+  },
+  read(S){
+    const tau=S.p.R*1000*S.p.C*1e-6;
+    const V=S.p.modo?S.p.V0*Math.exp(-S.t/tau):S.p.V0*(1-Math.exp(-S.t/tau));
+    const q=S.p.C*V; // µC
+    const i=S.p.modo? V/(S.p.R): (S.p.V0-V)/S.p.R; // mA
+    return [
+      {k:'τ = RC',v:fmt(tau)+' s'},{k:'tempo',v:fmt(S.t,1)+' s'},
+      {k:'V capacitor',v:fmt(V)+' V'},{k:'carga q',v:fmt(q,0)+' µC'},
+      {k:'corrente',v:fmt(i,3)+' mA'},{k:'% de V₀',v:fmt(100*V/S.p.V0,1)+' %'},
+    ];}
+};
+
+SIMS.ciclotron={
+  title:'Carga em Campo Magnético', mod:'f3',
+  desc:'Carga com velocidade perpendicular a <b>B</b> (saindo da tela, ⊙) faz movimento circular: <code>F = q·v·B</code> é centrípeta, logo <code>r = m·v/(|q|·B)</code>. Inverta o sinal da carga e o giro inverte.',
+  controls:[
+    {id:'B',label:'Campo magnético B',min:0.2,max:5,step:0.1,value:1.5,unit:'T',dec:1,live:true},
+    {id:'v',label:'Velocidade',min:20,max:200,step:5,value:100,unit:'m/s',dec:0,live:true},
+    {id:'q',label:'Carga (sinal importa)',min:-4,max:4,step:0.5,value:2,unit:'µC',dec:1,live:true},
+  ],
+  init(S){ S.x=W/2+120; S.y=H/2; S.ang=Math.PI/2; S.trail=[]; },
+  update(S,dt){
+    const q=S.p.q===0?0.5:S.p.q;
+    const r=2.0*S.p.v/(Math.abs(q)*S.p.B); // escala visual
+    const w=(S.p.v*1.4)/r*Math.sign(q);
+    S.ang+=w*dt;
+    // centro do círculo perpendicular à velocidade
+    const cxr=W/2, cyr=H/2;
+    S.x=cxr+r*Math.cos(S.ang); S.y=cyr+r*Math.sin(S.ang);
+    S.trail.push([S.x,S.y]); if(S.trail.length>140)S.trail.shift();
+    S.r=r; S.w=w;
+  },
+  draw(c,S){
+    // símbolos de B saindo da tela
+    for(let gx=50;gx<W;gx+=90) for(let gy=50;gy<H;gy+=90){
+      c.strokeStyle='rgba(167,139,250,.25)';c.lineWidth=1.5;
+      c.beginPath();c.arc(gx,gy,9,0,7);c.stroke();
+      c.fillStyle='rgba(167,139,250,.35)';c.beginPath();c.arc(gx,gy,2.5,0,7);c.fill();
+    }
+    txt('B saindo da tela ⊙',W-210,34,'rgba(167,139,250,.7)',12);
+    // rastro
+    S.trail.forEach((p,i)=>{
+      c.globalAlpha=i/S.trail.length*0.6;
+      c.fillStyle=COLORS.f3;c.beginPath();c.arc(p[0],p[1],3,0,7);c.fill();
+    });
+    c.globalAlpha=1;
+    // partícula + vetor v e F
+    const vx=-Math.sin(S.ang)*Math.sign(S.w), vy=Math.cos(S.ang)*Math.sign(S.w);
+    const fx=(W/2-S.x), fy=(H/2-S.y), fm=Math.hypot(fx,fy);
+    c.fillStyle=S.p.q>=0?'#ff7b9c':'#4fd6e3';
+    c.beginPath();c.arc(S.x,S.y,11,0,7);c.fill();
+    txt(S.p.q>=0?'+':'−',S.x,S.y+5,'#0d1220',15,'center');
+    arrow(S.x,S.y,vx*50,vy*50,'#6ee7a0'); txt('v',S.x+vx*50+8,S.y+vy*50,'#6ee7a0',12);
+    arrow(S.x,S.y,fx/fm*40,fy/fm*40,'#ffd27a'); txt('F',S.x+fx/fm*40+8,S.y+fy/fm*40,'#ffd27a',12);
+  },
+  read(S){
+    const q=Math.abs(S.p.q===0?0.5:S.p.q);
+    const T=2*Math.PI/Math.abs(S.w||0.001);
+    return [
+      {k:'raio (visual)',v:fmt(S.r,0)+' px'},
+      {k:'sentido',v:S.p.q>=0?'anti-horário':'horário'},
+      {k:'F = qvB',v:fmt(q*S.p.v*S.p.B,1)+' µN'},
+      {k:'período',v:fmt(T)+' s'},
+    ];}
+};
+
+/* ================== UI ================== */
+const MODULES={
+  f1:['projetil','inclinado','colisao','pendulo','mola'],
+  f2:['gas','lei1','maquina','lei2','som','ondas','pressao','hidro','empuxo','calor'],
+  f3:['campo','campoB','rc','ciclotron'],
+};
+
+function loadModule(mod){
+  currentMod=mod; setAccent(mod);
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.mod===mod));
+  const chips=document.getElementById('chips'); chips.innerHTML='';
+  MODULES[mod].forEach(id=>{
+    const b=document.createElement('button');
+    b.className='chip'; b.dataset.sim=id; b.textContent=SIMS[id].title;
+    b.onclick=()=>loadSim(id);
+    chips.appendChild(b);
+  });
+  loadSim(MODULES[mod][0]);
+}
+
+document.getElementById('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(t) loadModule(t.dataset.mod);
+});
+document.getElementById('btnReset').onclick=()=>resetSim();
+document.getElementById('btnPause').onclick=()=>{
+  running=!running;
+  document.getElementById('btnPause').textContent=running?'⏸ pausar':'▶ continuar';
+};
+
+buildUnits();
+loadModule('f1');
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
